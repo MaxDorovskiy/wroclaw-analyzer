@@ -7,6 +7,9 @@ lxml>=5.0
 apscheduler>=3.10,<4
 pydantic>=2.7
 python-dotenv>=1.0
+# экспорт каталога и контактов в Excel: без него /api/export?format=xlsx
+# отвечал 500 на чистой установке (test_api_roundtrip)
+openpyxl>=3.1
 # провайдеры перевода (все необязательные — включаются настройкой)
 anthropic>=1.0
 # проверка

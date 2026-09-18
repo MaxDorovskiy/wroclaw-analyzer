@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
+from app.console import utf8_stdio  # noqa: E402
 from app.db import SessionLocal  # noqa: E402
 from app.models import Listing, ScrapeRun  # noqa: E402
 from app.scraper import PROTECTED, flush_unknown  # noqa: E402
@@ -21,6 +22,7 @@ from app.sources import RawListing, get_source  # noqa: E402
 
 
 def main():
+    utf8_stdio()
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", default=None)
     ap.add_argument("--limit", type=int, default=0)

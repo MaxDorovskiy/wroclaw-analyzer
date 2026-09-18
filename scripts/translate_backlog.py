@@ -11,10 +11,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from app import translate  # noqa: E402
+from app.console import utf8_stdio  # noqa: E402
 from app.db import SessionLocal  # noqa: E402
 
 
 def main():
+    utf8_stdio()
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=None)
     args = ap.parse_args()

@@ -11,6 +11,10 @@ __pycache__/
 frontend/node_modules/
 frontend/dist/
 
+# Пароли сервера на Windows: env.example.ps1 обещал «он в .gitignore», но
+# строки не было — первый же `git add -A` на ПК унёс бы пароли на GitHub
+deploy/windows/env.ps1
+
 # Прочее
 .DS_Store
 *.log

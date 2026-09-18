@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from app.config import PROBE_DIR  # noqa: E402
+from app.console import utf8_stdio  # noqa: E402
 from app.db import SessionLocal, ensure_columns  # noqa: E402
 from app.fetcher import BlockedError, Fetcher  # noqa: E402
 from app.normalize import normalize  # noqa: E402
@@ -38,6 +39,7 @@ def show(d):
 
 
 def main():
+    utf8_stdio()
     ap = argparse.ArgumentParser()
     ap.add_argument("--kind", default="sale", choices=["sale", "rent"])
     ap.add_argument("--source", default="all")

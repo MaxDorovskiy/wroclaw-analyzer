@@ -11,11 +11,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from app import analytics  # noqa: E402
+from app.console import utf8_stdio  # noqa: E402
 from app.db import SessionLocal  # noqa: E402
 from app.models import Listing  # noqa: E402
 
 
 def main():
+    utf8_stdio()
     lid = int(sys.argv[1])
     db = SessionLocal()
     l = db.get(Listing, lid)

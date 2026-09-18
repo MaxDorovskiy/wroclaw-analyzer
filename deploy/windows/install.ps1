@@ -1,4 +1,4 @@
-# Установка на Windows 11: venv, зависимости, сборка фронтенда, задачи
+﻿# Установка на Windows 11: venv, зависимости, сборка фронтенда, задачи
 # Планировщика, правило брандмауэра. Запускать из PowerShell от имени
 # администратора (для задач и брандмауэра):
 #   Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
@@ -27,9 +27,12 @@ if ($NoTasks) { exit 0 }
 $port = if ($env:WRO_PORT) { $env:WRO_PORT } else { "8020" }
 $ps = "powershell.exe"
 $user = "$env:USERDOMAIN\$env:USERNAME"
-function Register($name, $args, $trigger) {
+# Параметр нельзя называть $args: это автоматическая переменная PowerShell, и
+# значение в неё не привязывается (проверено на 5.1: приходит пустой массив) —
+# все четыре задачи создавались без «-File ...» и запускали пустой powershell.exe.
+function Register($name, $taskArgs, $trigger) {
     Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction SilentlyContinue
-    $action = New-ScheduledTaskAction -Execute $ps -Argument ("-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass " + $args)
+    $action = New-ScheduledTaskAction -Execute $ps -Argument ("-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass " + $taskArgs)
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 0) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew
     Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Settings $settings -User $user -RunLevel Highest | Out-Null
     Write-Host "задача $name создана"

@@ -1,4 +1,4 @@
-# Запуск прогона по расписанию: POST /api/scrape с паролем из env.ps1.
+﻿# Запуск прогона по расписанию: POST /api/scrape с паролем из env.ps1.
 # Случайная задержка 0-20 мин, чтобы старт не приходился ровно на час.
 # Аренда при 409 (идёт продажа / пауза) повторяет попытку каждые 15 минут,
 # до 6 раз — так же, как rent_trigger.sh в Киеве.
@@ -7,9 +7,12 @@ $ErrorActionPreference = "Continue"
 . (Join-Path $PSScriptRoot "env.ps1")
 $port = if ($env:WRO_PORT) { $env:WRO_PORT } else { "8020" }
 $log = Join-Path $env:WRO_DATA "trigger.log"
-function Log($m) { Add-Content -Path $log -Value ("{0} [{1}] {2}" -f (Get-Date -Format s), $Kind, $m) }
-# обрезка лога: при 5 МБ оставить последние 5000 строк
-if ((Test-Path $log) -and ((Get-Item $log).Length -gt 5MB)) { Get-Content $log -Tail 5000 | Set-Content $log }
+# UTF-8 явно: по умолчанию PowerShell 5.1 пишет в ANSI (cp1251), а server.log
+# рядом — в UTF-8; один просмотрщик не открыл бы оба без кракозябр
+function Log($m) { Add-Content -Path $log -Encoding UTF8 -Value ("{0} [{1}] {2}" -f (Get-Date -Format s), $Kind, $m) }
+# обрезка лога: при 5 МБ оставить последние 5000 строк. Скобки обязательны:
+# без них Set-Content открывает файл, пока Get-Content его ещё читает («файл занят»)
+if ((Test-Path $log) -and ((Get-Item $log).Length -gt 5MB)) { (Get-Content $log -Tail 5000 -Encoding UTF8) | Set-Content $log -Encoding UTF8 }
 $jitter = Get-Random -Minimum 0 -Maximum ($MaxJitterMin * 60)
 Log "жду $jitter с"
 Start-Sleep -Seconds $jitter
