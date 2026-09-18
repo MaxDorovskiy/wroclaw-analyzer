@@ -35,3 +35,24 @@ def test_cache_and_chunks(clean_db):
     assert len(parts) > 1 and all(len(x) <= translate.CHUNK_CHARS + 20 for x in parts)
     st = translate.pending_counts(db)
     assert st["pending_titles"] == 0 and st["done_total"] == 2
+
+
+def test_ollama_context_comes_from_settings(monkeypatch):
+    """Контекст должен совпадать с уже загруженным экземпляром модели, иначе Ollama
+    перезагружает её на каждый запрос (замер: 15-25 с против 0.0 с)."""
+    sent = []
+
+    class Resp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"message": {"content": u"<think>…</think>Квартира"}}
+
+    monkeypatch.setattr(translate.httpx, "post", lambda url, json=None, timeout=None: sent.append(json) or Resp())
+    p = translate.get_provider({"translate_provider": "ollama", "translate_ollama_model": "qwen3.5:9b-q4_K_M",
+                                "translate_ollama_num_ctx": "16384"})
+    assert p.translate([u"Mieszkanie"]) == [u"Квартира"]
+    assert sent[0]["options"]["num_ctx"] == 16384 and sent[0]["model"] == "qwen3.5:9b-q4_K_M"
+    assert translate.get_provider({"translate_provider": "ollama"}).num_ctx == 8192            # по умолчанию
+    assert translate.get_provider({"translate_provider": "ollama", "translate_ollama_num_ctx": "x"}).num_ctx == 8192

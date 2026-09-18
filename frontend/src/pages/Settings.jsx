@@ -13,6 +13,7 @@ const SECTIONS = [
     { key: 'translate_provider', label: 'Провайдер перекладу', type: 'select', options: T.provider },
     { key: 'translate_ollama_url', label: 'Ollama: адреса', hint: 'наприклад http://127.0.0.1:11434' },
     { key: 'translate_ollama_model', label: 'Ollama: модель' },
+    { key: 'translate_ollama_num_ctx', label: 'Ollama: вікно контексту', type: 'number', hint: 'якщо цю саму модель уже тримає в памʼяті інша система — поставте її значення (колонка CONTEXT в «ollama ps»), інакше модель перезавантажується на кожен запит (15–25 с)' },
     { key: 'translate_anthropic_model', label: 'Anthropic: модель' },
     { key: 'translate_anthropic_key', label: 'Anthropic: ключ API', secret: true },
     { key: 'translate_google_key', label: 'Google Translate: ключ', secret: true },

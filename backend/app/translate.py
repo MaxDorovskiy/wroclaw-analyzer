@@ -81,9 +81,10 @@ class Provider:
 class OllamaProvider(Provider):
     name = "ollama"
 
-    def __init__(self, url: str, model: str):
+    def __init__(self, url: str, model: str, num_ctx: int = 8192):
         self.url = url.rstrip("/")
         self.model = model
+        self.num_ctx = num_ctx          # см. translate_ollama_num_ctx в config.py
 
     def translate(self, texts: List[str]) -> List[str]:
         out = []
@@ -94,7 +95,7 @@ class OllamaProvider(Provider):
                 "think": False,
                 "messages": [{"role": "system", "content": SYSTEM_PROMPT},
                              {"role": "user", "content": t}],
-                "options": {"temperature": 0.1, "num_ctx": 8192},
+                "options": {"temperature": 0.1, "num_ctx": self.num_ctx},
             }, timeout=300)
             r.raise_for_status()
             msg = (r.json().get("message") or {}).get("content") or ""
@@ -168,8 +169,13 @@ class DeepLProvider(Provider):
 def get_provider(settings: Dict[str, str]) -> Optional[Provider]:
     name = (settings.get("translate_provider") or "none").strip()
     if name == "ollama":
+        try:
+            num_ctx = int(float(settings.get("translate_ollama_num_ctx") or 8192))
+        except ValueError:
+            num_ctx = 8192
         return OllamaProvider(settings.get("translate_ollama_url") or "http://127.0.0.1:11434",
-                              settings.get("translate_ollama_model") or "gemma3:12b")
+                              settings.get("translate_ollama_model") or "gemma3:12b",
+                              max(2048, num_ctx))
     if name == "anthropic":
         return AnthropicProvider(settings.get("translate_anthropic_key") or "",
                                  settings.get("translate_anthropic_model") or "claude-opus-5")
