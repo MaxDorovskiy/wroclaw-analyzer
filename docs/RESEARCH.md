@@ -116,12 +116,46 @@ Id категорий (`14` продажа квартир, `15` аренда) и
 вынесены в настройки, а `probe_sources.py` печатает `category.id` и
 `location.city` первых записей — по ним видно, туда ли попали.
 
+### 2.3 Проверка на живых ответах (18.09.2026, ПК владельца)
+
+Разделы 2.1–2.2 писались по памяти; ниже — что показали площадки. Сырые
+ответы — `%WRO_DATA%/probe`, обезличенные выдержки — `tests/fixtures/*_live.json`.
+
+**Otodom** (httpx + HTTP/2 проходит, DataDome не сработал):
+
+| Ожидали | Оказалось |
+|---|---|
+| `floorNumber`: `GROUND`, `FLOOR_1`… | порядковые слова: `GROUND`, `FIRST` … `TENTH`, `ABOVE_TENTH`, `CELLAR`, `null` |
+| `dateCreatedFirst` | ключ `createdAtFirst`; время выдачи — **польское местное даже с «Z»** (в выдаче `10:21:14Z`, в карточке того же объявления `createdAt=08:21:14Z`), `pushedUpAt` — с честным смещением |
+| 72 записи на страницу | 72 «результата», но квартиры застройщика **свёрнуты в `relatedAds` записи-инвестиции** (`estate=INVESTMENT`, у самой ни цены, ни площади): на стр. 100 — 13 записей и 62 вложенные. Без разворота собиралось 5.4 тыс. из 9.5 тыс. |
+| `location.address.district` | в адресе только улица/город/воеводство; место — в `reverseGeocoding.locations[]` с `locationLevel`: `voivodeship`, `city_or_village`, `district`, `residential` (70 имён под-районов на Вроцлав) |
+| всё в выдаче — Вроцлав | 0.6% — пригороды с вписанным городом «Wrocław»: `county`=«wrocławski», `commune`, `city_or_village`=«Iwiny»; медиана 11.7 против 13.6 тыс. zł/м² |
+| `rentPrice` — czynsz | да, но `null` у ~20% и `value: 0` у ~5% («не заполнено») |
+| карточка | совпала: `characteristics[]` (в аренде ещё `deposit`, `free_from`), `target`, `owner/agency.phones`, `location.coordinates`, `createdAt` (UTC) |
+
+**OLX**:
+
+| Ожидали | Оказалось |
+|---|---|
+| httpx с браузерными заголовками | 403 от CloudFront WAF («Request blocked», `x-cache: Error from cloudfront`) на любой адрес, включая robots.txt; Chromium с того же ПК — 200. Режется отпечаток клиента, не IP. JSON берётся `fetch()` из страницы того же origin |
+| `metadata.total_elements` | срезан на 1000; настоящее число — `visible_total_count` (1865 продажа) |
+| `offset += 40` | страница = 40 обычных + ~12 рекламных (`promotion.top_ad`, повторяются); следующий offset — из `links.next` (после 0 шло 39 и 37) |
+| friendly-links `a/b/c/` | 404; работает `a,b,c/` → `{"data": {"category_id": 14, "city_id": 19701}}` |
+| params | `price`, `price_per_m`, `m`, `rooms`, `floor_select`, `builttype` (`blok`, `kamienica`, `apartamentowiec`, `wolnostojacy`, `szeregowiec`, `loft`, `pozostale`), `market`, `furniture`; у аренды ещё `rent` (czynsz), `winda`, `pets`, `parking` |
+| телефон | только признак `contact.phone: true`; ~60% продажи — зеркала Otodom с `external_url` |
+
+robots.txt OLX: `Disallow: /api/`, но явные `Allow: /api/v1/offers/`,
+`/api/v1/targeting/`, `/api/v1/friendly-links/` для всех агентов.
+
 ## 3. Анти-бот, темп, этика
 
 - **Otodom за DataDome.** Признаки блока: 403, заголовок `x-datadome` /
   `x-dd-b`, cookie `datadome`, в теле `dd` в `<script>`. DataDome весит
   HTTP/1.1 как признак бота — клиент ходит по **HTTP/2** (`httpx[http2]`),
   с полным набором браузерных заголовков и `Accept-Language: pl-PL`.
+- **OLX за CloudFront WAF** (выяснилось 18.09.2026, см. §2.3): клиент на
+  Python получает 403 сразу и всегда, пауза не лечит — `fetcher` ходит на
+  olx.pl через Chromium с первого же блока и до конца прогона. Темп тот же.
 - **Темп — не быстрее 12–15 запросов в минуту на источник**, случайные
   паузы, источники **по очереди, не параллельно** (тот же урок, что и с
   rieltor.ua в Киеве: всплеск с домашнего IP = бан).
@@ -150,9 +184,12 @@ Id категорий (`14` продажа квартир, `15` аренда) и
   только **дзельницу**. Единица аналитики — осиедле; дзельница — агрегат.
 - Справочник — `backend/app/geo.py`: список 48 осиедле, украинская
   транскрипция для показа рядом с оригиналом («Krzyki · Кшики»), соответствие
-  осиедле → дзельница. **Соответствие проставлено по памяти и требует
-  сверки** с https://geoportal.wroclaw.pl/osiedla/ — сомнительные
-  (Kleczków, Przedmieście Oławskie) помечены в коде.
+  осиедле → дзельница. **Сверено 18.09.2026:** список — с официальным
+  (geoportal.wroclaw.pl/poi/rejon/7; лишним оказался «Zakrzów» — часть Psie
+  Pole-Zawidawie); привязку к дзельницам геопортал не даёт (они упразднены в
+  1991 г.), она сверена по таблице «Dawna dzielnica» pl.wikipedia и по Otodom
+  (9411 объявлений, расхождений 0): Kleczków — Psie Pole, Przedmieście
+  Oławskie — Krzyki, Gajowice — Fabryczna.
 - Для OLX-объявлений осиедле восстанавливается из улицы (`street` →
   справочник улиц; пока пусто — DEFERRED, пункт 3) или из текста.
 

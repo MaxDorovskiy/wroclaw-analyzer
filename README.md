@@ -34,9 +34,13 @@ WRO_DB=data/demo.db DISABLE_SCHEDULER=1 .venv/bin/uvicorn app.main:app --app-dir
 аренда 02:30), брандмауэр. Пароль и путь к данным — в `deploy/windows/env.ps1`
 (не в git). Перезапуск — только `safe_restart.ps1`.
 
-**Перед первым прогоном** — `scripts/probe_sources.py`: среда, в которой
-писался код, не имела доступа к польским площадкам, и имена полей в JSON
-надо подтвердить на живых ответах (сырые ответы лягут в `data/probe/`).
+**Перед первым прогоном на новом месте** — `scripts/probe_sources.py` (и с
+`--kind rent`): площадки меняют поля и защиту, а проба за минуту показывает,
+понимают ли их адаптеры (сырые ответы лягут в `data/probe/`). Адаптеры сверены
+с живыми ответами 18.09.2026 — что нашлось, записано в `docs/RESEARCH.md` §2.3;
+фикстуры `tests/fixtures/*_live.json` сделаны из тех же ответов скриптом
+`scripts/make_fixtures.py`. OLX отвечает только настоящему браузеру — нужен
+Chromium (`playwright install chromium`, его ставит `install.ps1`).
 
 ## Что где
 
@@ -53,7 +57,8 @@ WRO_DB=data/demo.db DISABLE_SCHEDULER=1 .venv/bin/uvicorn app.main:app --app-dir
 | `backend/app/main.py` | API (docs/API.md), пароль, статика, планировщик |
 | `scripts/probe_sources.py` | проверка адаптеров на новом месте |
 | `scripts/explain_deal.py <id>` | почему такая скидка — по шагам |
-| `scripts/reparse.py` | повторный разбор raw_json после правки парсера |
+| `scripts/make_fixtures.py` | обезличенные фикстуры для тестов из сырых ответов пробы |
+| `scripts/reparse.py` | повторный разбор raw_json после правки парсера (и снятие того, что адаптер больше не берёт) |
 | `scripts/translate_backlog.py` | догнать очередь перевода |
 | `scripts/ui_check.py` | скриншоты интерфейса на фикстурах без сервера |
 | `deploy/windows/` | установка, сервер, триггеры, безопасный перезапуск |

@@ -25,6 +25,25 @@ if (Get-Command npm -ErrorAction SilentlyContinue) {
 New-Item -ItemType Directory -Force -Path $env:WRO_DATA | Out-Null
 if ($NoTasks) { exit 0 }
 $port = if ($env:WRO_PORT) { $env:WRO_PORT } else { "8020" }
+# Сервер уже может работать: поднят вручную (server.ps1 без Планировщика — так прошла
+# первая установка 18.09.2026) или остался от прошлой установки: Unregister-ScheduledTask
+# запущенный экземпляр не останавливает. Порт был бы занят, и новая задача крутилась бы в
+# перезапусках uvicorn. Прогон при этом рвать нельзя — сначала спрашиваем сам сервер.
+$pair = "{0}:{1}" -f $env:WRO_WEB_USER, $env:WRO_WEB_PASS
+$hdr = @{ Authorization = "Basic " + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($pair)) }
+$busy = $false
+try { $busy = [bool](Invoke-RestMethod -Uri "http://127.0.0.1:$port/api/summary" -Headers $hdr -TimeoutSec 20).scrape_running }
+catch { }   # не отвечает — прогона точно нет, останавливать можно
+if ($busy) {
+    Write-Host "ИДЁТ ПРОГОН — задачи не переустанавливаю, чтобы его не оборвать. Дождитесь окончания («Прогони») и запустите скрипт снова." -ForegroundColor Yellow
+    exit 1
+}
+Stop-ScheduledTask -TaskName "WroAnalyzer-Server" -ErrorAction SilentlyContinue
+Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" |
+    Where-Object { $_.CommandLine -like "*server.ps1*" -and $_.ProcessId -ne $PID } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+$pidFile = Join-Path $env:WRO_DATA "server.pid"
+if (Test-Path $pidFile) { Stop-Process -Id (Get-Content $pidFile) -Force -ErrorAction SilentlyContinue }
 $ps = "powershell.exe"
 $user = "$env:USERDOMAIN\$env:USERNAME"
 # Параметр нельзя называть $args: это автоматическая переменная PowerShell, и
