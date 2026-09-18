@@ -44,6 +44,7 @@ export const errorText = (err) => {
   if (!err) return ''
   if (err.status === 404) return 'Сервер ще не перезапущений після викатки — ручки ще немає'
   if (err.status === 401) return 'Потрібен вхід: сервер закритий паролем (basic-auth)'
+  if (err.status === 403) return 'Доступ лише для адміністратора'
   if (err.status === 409) return err.message || 'Зараз не можна: іде прогін або стоїть пауза'
   return err.message || String(err)
 }
@@ -89,6 +90,11 @@ export const api = {
   // числом его размещений и телефоном (если площадка его отдаёт)
   contacts: (params) => req('GET', '/api/contacts' + qs(params)),
   contactsExportUrl: (params, format) => BASE + '/api/contacts/export' + qs({ ...params, format }),
+  // Кто вошёл и с какой ролью: viewer (рієлторка Юлія) не видит прогонов,
+  // настроек и журнала — сервер на них отвечает 403, интерфейс их прячет
+  me: () => req('GET', '/api/me'),
+  // журнал действий пользователей, только admin
+  activity: (params) => req('GET', '/api/activity' + qs(params)),
 }
 
 // Телефон в буфер обмена. navigator.clipboard есть только в безопасном

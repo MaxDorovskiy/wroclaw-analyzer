@@ -6,7 +6,9 @@ import { useFlash } from '../components/Toast.jsx'
 
 const STATUS_ICON = { running: '⏳', done: '✅', failed: '❌', stopped: '⏸' }
 
-export default function Runs({ summary }) {
+export default function Runs({ summary, me }) {
+  // viewer — только смотреть: кнопки прячем, сервер на них и так ответит 403
+  const canAct = me?.role !== 'viewer'
   const [runs, setRuns] = useState(null)
   const [err, setErr] = useState(null)
   const [ts, setTs] = useState(null)
@@ -41,7 +43,7 @@ export default function Runs({ summary }) {
     <>
       <div className="panel">
         <h3>Прогони</h3>
-        <div className="row" style={{ marginBottom: 10 }}>
+        {canAct && <div className="row" style={{ marginBottom: 10 }}>
           <button className="btn" disabled={!!busy || running} title="Otodom + OLX, продаж; ~1 година"
             onClick={() => run('sale', () => api.scrape('sale', 'all'), r => `Запущено прогін продажу #${r.run_id ?? ''}`)}>▶ Запустити продаж</button>
           <button className="btn" disabled={!!busy || running} title="Otodom + OLX, оренда; ~30 хвилин"
@@ -61,7 +63,7 @@ export default function Runs({ summary }) {
           <span style={{ width: 16 }} />
           <button className="btn ghost" disabled={!!busy} title="Дублі → вигідність → дохідність, у фоні"
             onClick={() => run('recompute', api.recompute, 'Перерахунок запущено у фоні')}>↻ Перерахувати</button>
-        </div>
+        </div>}
         <p className="muted small">
           {running ? <span><span className="spin" />іде прогін…</span> : 'прогін не йде'}
           {paused ? <span className="badge drop" style={{ marginLeft: 10 }}>
@@ -117,7 +119,7 @@ export default function Runs({ summary }) {
           </div>
         ) : <p className="muted">Статус перекладу недоступний</p>}
         {ts?.last_error && <div className="error-box"><b>Остання помилка перекладу:</b> {ts.last_error}</div>}
-        <div className="row">
+        {canAct && <div className="row">
           <label className="chk">не більше
             <input type="number" min={1} style={{ width: 80 }} value={limit} onChange={e => setLimit(+e.target.value)} /> шт.
           </label>
@@ -125,7 +127,7 @@ export default function Runs({ summary }) {
             onClick={() => run('translate', () => api.translateRun(limit), 'Переклад черги запущено у фоні')}>
             {ts?.running ? <span><span className="spin" />перекладаємо…</span> : 'Перекласти чергу'}
           </button>
-        </div>
+        </div>}
       </div>
 
       <div className="panel">

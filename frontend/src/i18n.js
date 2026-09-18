@@ -128,3 +128,81 @@ export const yieldTitle = (l) => {
   }
   return parts.join('; ')
 }
+
+// ---------- журнал дій ----------
+// Подписи действий — запасные: сервер присылает action_uk, но фильтр «дія»
+// в журнале строится до первого ответа и берёт названия отсюда.
+T.action = {
+  view_card: 'відкрив(ла) картку',
+  search: 'пошук у каталозі',
+  favorite: 'обране',
+  manual: 'ручна правка',
+  detach: "від'єднання дубля",
+  translate: 'переклад',
+  export: 'експорт',
+  contacts: 'контакти',
+  other: 'інше',
+}
+
+const SORT_UK = {
+  first_seen: 'нові в базі', posted: 'дата подачі', discount: 'знижка', price: 'ціна',
+  price_sqm: 'zł/м²', area: 'площа', yield: 'дохідність', price_drop: 'зниження ціни',
+  active_total: 'активні', last_seen: 'останній перегляд', listings_rent: 'оренда', listings_sale: 'продаж',
+}
+
+// «4,5,6,7,8,9,10» — это чип «4+», раскрытый каталогом для API (Catalog.expandRooms);
+// в журнале сворачиваем обратно, иначе строка нечитаема
+const PLUS = ['4', '5', '6', '7', '8', '9', '10']
+const collapseRooms = (v) => {
+  const set = new Set(String(v).split(',').filter(Boolean))
+  if (PLUS.every(r => set.has(r))) { PLUS.forEach(r => set.delete(r)); set.add('4+') }
+  return Array.from(set).join('/')
+}
+const list = (v) => String(v).split(',').filter(Boolean).join('/')
+
+// Расшифровка строки запроса в журнале: «оренда · 2 кімн. · ціна до 3 000 ·
+// осиедле Gaj». Ключи — параметры /api/listings и /api/contacts; незнакомый
+// ключ остаётся как есть, чтобы новый фильтр не пропал из журнала молча.
+const Q = {
+  offer_type: v => v === 'rent' ? 'оренда' : v === 'sale' ? 'продаж' : v === 'all' ? 'продаж + оренда' : `тип ${v}`,
+  rooms: v => `${collapseRooms(v)} кімн.`,
+  price_min: v => `ціна від ${fmtNum(v)}`, price_max: v => `ціна до ${fmtNum(v)}`,
+  area_min: v => `від ${v} м²`, area_max: v => `до ${v} м²`,
+  sqm_min: v => `від ${fmtNum(v)} zł/м²`, sqm_max: v => `до ${fmtNum(v)} zł/м²`,
+  district: v => `дзельниця ${list(v)}`, osiedle: v => `осиедле ${list(v)}`,
+  market: v => `ринок ${T.market[v] || v}`,
+  condition: v => `стан ${String(v).split(',').map(c => T.condition[c] || c).join('/')}`,
+  source: v => `джерело ${T.source[v] || v}`,
+  seller_type: v => `продавець ${T.seller[v] || v}`,
+  build_year_min: v => `рік від ${v}`, build_year_max: v => `рік до ${v}`,
+  floor_min: v => `поверх від ${v}`, floor_max: v => `поверх до ${v}`,
+  only_deals: () => 'лише вигідні', discount_min: v => `знижка ≥ ${v}%`, yield_min: v => `дохідність ≥ ${v}%`,
+  favorites: () => 'обрані', dupes: () => 'усі розміщення', has_phone: () => 'є телефон',
+  active: v => String(v) === '0' ? 'активні + зняті' : 'лише активні',
+  q: v => `пошук «${v}»`, seller_key: v => `продавець ${v}`, first_seen_days: v => `нові за ${v} дн`,
+  sort: v => `сортування: ${SORT_UK[v] || v}`, order: () => null, per_page: () => null, limit: () => null,
+  page: v => String(v) === '1' ? null : `стор. ${v}`, format: v => `формат ${String(v).toUpperCase()}`,
+  level: v => `рівень: ${T.level[v] || v}`, period: v => `період ${v}`, weeks: v => `${v} тижнів`,
+  days: v => `${v} дн`, user: v => `користувач ${v}`, action: v => `дія ${T.action[v] || v}`,
+}
+export function describeQuery(query, path) {
+  if (!query) return ''
+  let sp
+  try { sp = new URLSearchParams(query) } catch { return String(query) }
+  const parts = []
+  for (const [k, v] of sp.entries()) {
+    const fn = Q[k]
+    const text = fn ? fn(v) : `${k}=${v}`
+    if (text) parts.push(text)
+  }
+  const prefix = path && path.includes('/contacts') ? 'контакти' : ''
+  return [prefix, ...parts].filter(Boolean).join(' · ')
+}
+
+// «1 дія», «3 дії», «42 дій»
+export const actionsWord = (n) => {
+  const m10 = n % 10, m100 = n % 100
+  if (m10 === 1 && m100 !== 11) return 'дія'
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return 'дії'
+  return 'дій'
+}

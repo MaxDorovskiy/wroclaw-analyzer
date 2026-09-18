@@ -151,16 +151,32 @@ def report(errors, missing, served):
 
 
 def run_scenario(errors, missing, served, out_dir):
+    # Подмена фикстур по ходу сценария: {'me.json': 'me_viewer.json'} делает
+    # из владельца рієлторку с ролью viewer.
+    overrides = {}
+
+    def viewer_mode():
+        return overrides.get('me.json') == 'me_viewer.json'
+
     def handle(route, request):
         url = urlparse(request.url)
         if not url.path.startswith('/api/'):
             route.fulfill(status=200, content_type='image/svg+xml', body=PLACEHOLDER_SVG, headers=CORS)
+            return
+        # viewer: закрытые ручки отвечают 403, как боевой сервер — если страница
+        # их всё-таки дёрнет, 403 попадёт в консоль и завалит проверку
+        if viewer_mode() and (url.path.startswith('/api/activity') or url.path == '/api/settings'
+                              or (request.method == 'POST' and (url.path.startswith('/api/scrape')
+                                  or url.path in ('/api/recompute', '/api/translate/run')))):
+            route.fulfill(status=403, content_type='application/json',
+                          body='{"detail": "Лише для адміністратора"}', headers=CORS)
             return
         if request.method == 'POST':
             body = json.dumps(post_response(url.path), ensure_ascii=False)
             route.fulfill(status=200, content_type='application/json', body=body, headers=CORS)
             return
         name = fixture_name(url.path, parse_qs(url.query))
+        name = overrides.get(name, name)
         f = FIXTURES / name
         if not f.exists():
             missing.append(f'{request.method} {url.path}?{url.query} -> {name}')
@@ -248,6 +264,37 @@ def run_scenario(errors, missing, served, out_dir):
         shot('runs')
         go('#/settings', '.form-grid input')
         shot('settings')
+
+        # журнал дій: плашки per_user и расшифрованный запрос поиска
+        go('#/journal', 'table.grid tbody tr')
+        if 'yulia' not in page.inner_text('.filters'):
+            errors.append('журнал: немає плашки per_user для yulia')
+        if '4+ кімн.' not in page.inner_text('table.grid'):
+            errors.append('журнал: запит пошуку не розшифровано (rooms=4,5,…,10 → «4+ кімн.»)')
+        shot('journal')
+
+        # роль viewer: /api/me отдаёт другую фикстуру; роль читается при
+        # старте приложения, поэтому страница перезагружается целиком
+        overrides['me.json'] = 'me_viewer.json'
+        page.evaluate('location.hash = "#/catalog"')
+        page.reload(wait_until='load')
+        page.wait_for_selector('table.grid tbody tr.clickable', timeout=15000)
+        page.wait_for_load_state('networkidle')
+        page.wait_for_timeout(300)
+        tabs = page.locator('.tabs button').all_inner_texts()
+        for hidden in ('Журнал', 'Прогони', 'Налаштування'):
+            if hidden in tabs:
+                errors.append(f'viewer бачить вкладку «{hidden}»: {tabs}')
+        if 'yulia' not in page.inner_text('.topbar .status'):
+            errors.append("viewer: ім'я користувача не показано в шапці")
+        go('#/journal', '.admin-only')
+        if 'лише для адміністратора' not in page.inner_text('.admin-only').lower():
+            errors.append('viewer: прямий перехід у журнал не пояснено')
+        shot('viewer')
+        go('#/runs', 'table.grid tbody tr')
+        if page.locator('button:has-text("Запустити продаж")').count():
+            errors.append('viewer бачить кнопку запуску прогону')
+        del overrides['me.json']
 
         # Ручки ещё нет (сервер не перезапущен после выкатки): страница обязана
         # объяснить это словами, а не показать голое «Not Found». Маршрут,

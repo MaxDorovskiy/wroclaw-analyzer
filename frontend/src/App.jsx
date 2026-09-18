@@ -6,6 +6,7 @@ import Contacts from './pages/Contacts.jsx'
 import Stats from './pages/Stats.jsx'
 import Runs from './pages/Runs.jsx'
 import Settings from './pages/Settings.jsx'
+import Journal from './pages/Journal.jsx'
 import Card from './components/Card.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import LangSwitch from './components/LangSwitch.jsx'
@@ -19,9 +20,17 @@ const TABS = [
   ['contacts', 'Контакти'],
   ['stats', 'Статистика'],
   ['runs', 'Прогони'],
+  ['journal', 'Журнал'],
   ['settings', 'Налаштування'],
 ]
 const TAB_IDS = TABS.map(([id]) => id)
+// Разделы владельца. viewer (рієлторка Юлія) их вкладок не видит; по прямой
+// ссылке «Журнал» и «Налаштування» отвечают «лише для адміністратора», а
+// «Прогони» открываются в режиме чтения (GET /api/runs ей разрешён, спрятаны
+// только кнопки). Сервер на закрытые ручки отвечает 403 и без нас — здесь
+// лишь чтобы не показывать мёртвые кнопки.
+const ADMIN_TABS = new Set(['journal', 'runs', 'settings'])
+const ADMIN_ONLY_PAGES = new Set(['journal', 'settings'])
 
 // ---------- адресация ----------
 // Хэш, а не «настоящие» пути: сервер отдаёт статику из frontend/dist, и путь
@@ -60,6 +69,7 @@ export default function App() {
   const [jump, setJump] = useState(null)
   const [summary, setSummary] = useState(null)
   const [geo, setGeo] = useState(null)
+  const [me, setMe] = useState(null)
   // Сколько раз адрес меняли СНАРУЖИ (вставленная ссылка, «назад»). Число
   // входит в key страницы: без перемонтирования вставленная ссылка на том же
   // разделе молча ничего не меняла бы — фильтры уже стоят в состоянии.
@@ -123,11 +133,18 @@ export default function App() {
   // Справочник дзельниц и осиедле — один на всё приложение: нужен фильтрам,
   // карточке (ручная правка осиедле) и контактам (перевод названий).
   useEffect(() => { api.geo().then(setGeo).catch(() => setGeo({ districts: [] })) }, [])
+  // Нет ответа (старый сервер без /api/me или он ещё поднимается) — считаем
+  // владельцем: до появления ролей других пользователей не было, а прятать
+  // от владельца «Налаштування» из-за 404 после выкатки — та самая ловушка.
+  // Ограничение здесь только косметическое, настоящее — 403 на сервере.
+  useEffect(() => { api.me().then(setMe).catch(() => setMe(null)) }, [])
 
   const Page = {
     catalog: Catalog, deals: Deals, rent: Rent, contacts: Contacts,
-    stats: Stats, runs: Runs, settings: Settings,
+    stats: Stats, runs: Runs, journal: Journal, settings: Settings,
   }[tab]
+  const isViewer = me?.role === 'viewer'
+  const tabs = isViewer ? TABS.filter(([id]) => !ADMIN_TABS.has(id)) : TABS
   const sale = summary?.sale, fx = summary?.fx
   const lastRun = summary?.last_runs?.sale?.finished_at
 
@@ -136,7 +153,7 @@ export default function App() {
       <div className="topbar">
         <h1>🏙️ Wrocław Analyzer</h1>
         <div className="tabs">
-          {TABS.map(([id, name]) => (
+          {tabs.map(([id, name]) => (
             <button key={id} className={'tab' + (tab === id ? ' active' : '')}
               onClick={() => openTab(id)}>{name}</button>
           ))}
@@ -160,13 +177,30 @@ export default function App() {
           {fx?.USD && <span title={'Курс НБП ' + (fx.date || '')}>$ {fmtNum(fx.USD, 2)} · € {fmtNum(fx.EUR, 2)} zł</span>}
           {lastRun && <span title="Кінець останнього прогону продажу">оновлено {fmtDateTime(lastRun, { year: undefined })}</span>}
           <LangSwitch />
+          {me?.user && (
+            <span className="small" title={isViewer
+              ? 'Роль: перегляд — прогони, налаштування і журнал недоступні'
+              : 'Роль: адміністратор'}>
+              👤 <b>{me.user}</b>{isViewer ? ' · перегляд' : ''}
+            </span>
+          )}
         </div>
       </div>
       <div className="page">
         <ErrorBoundary key={tab}>
-          <Page key={(jump ? 'j' + jump.at : tab) + '#' + extNav}
-            onOpen={openCard} summary={summary} geo={geo} goTo={goTo}
-            urlParams={params} onParams={onParams} />
+          {isViewer && ADMIN_ONLY_PAGES.has(tab) ? (
+            <div className="panel admin-only">
+              <h3>Лише для адміністратора</h3>
+              <p className="muted">
+                Цей розділ доступний лише власнику системи. Ви увійшли як <b>{me.user}</b> (перегляд).
+              </p>
+              <button className="btn" onClick={() => openTab('catalog')}>До каталогу</button>
+            </div>
+          ) : (
+            <Page key={(jump ? 'j' + jump.at : tab) + '#' + extNav}
+              onOpen={openCard} summary={summary} geo={geo} goTo={goTo} me={me}
+              urlParams={params} onParams={onParams} />
+          )}
         </ErrorBoundary>
       </div>
       {openId && <Card id={openId} onOpen={openCard} onClose={closeCard} geo={geo} goTo={goTo} />}

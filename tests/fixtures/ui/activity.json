@@ -1,0 +1,180 @@
+{
+  "rows": [
+    {
+      "at": "2026-09-18T12:41:00+03:00",
+      "user": "yulia",
+      "action": "search",
+      "action_uk": "пошук у каталозі",
+      "path": "/api/listings",
+      "query": "offer_type=rent&rooms=2&price_max=3500&osiedle=Plac+Grunwaldzki&sort=first_seen&order=desc&page=1&per_page=50",
+      "listing_id": null,
+      "listing": null
+    },
+    {
+      "at": "2026-09-18T12:42:10+03:00",
+      "user": "yulia",
+      "action": "view_card",
+      "action_uk": "відкрив(ла) картку",
+      "path": "/api/listings/201",
+      "query": "",
+      "listing_id": 201,
+      "listing": {
+        "title": "Здається 2 кімнати, Площа Ґрунвальдська, з меблями",
+        "osiedle": "Plac Grunwaldzki"
+      }
+    },
+    {
+      "at": "2026-09-18T12:43:05+03:00",
+      "user": "yulia",
+      "action": "favorite",
+      "action_uk": "обране",
+      "path": "/api/listings/201/favorite",
+      "query": "",
+      "listing_id": 201,
+      "listing": {
+        "title": "Здається 2 кімнати, Площа Ґрунвальдська, з меблями",
+        "osiedle": "Plac Grunwaldzki"
+      }
+    },
+    {
+      "at": "2026-09-18T12:47:30+03:00",
+      "user": "yulia",
+      "action": "contacts",
+      "action_uk": "контакти",
+      "path": "/api/contacts",
+      "query": "offer_type=rent&seller_type=private&sort=active_total&order=desc&page=1&per_page=50",
+      "listing_id": null,
+      "listing": null
+    },
+    {
+      "at": "2026-09-18T12:49:12+03:00",
+      "user": "yulia",
+      "action": "export",
+      "action_uk": "експорт",
+      "path": "/api/contacts/export",
+      "query": "offer_type=rent&seller_type=private&format=xlsx",
+      "listing_id": null,
+      "listing": null
+    },
+    {
+      "at": "2026-09-18T13:02:00+03:00",
+      "user": "yulia",
+      "action": "search",
+      "action_uk": "пошук у каталозі",
+      "path": "/api/listings",
+      "query": "offer_type=sale&rooms=4%2C5%2C6%2C7%2C8%2C9%2C10&district=Krzyki&condition=renovated%2Cto_refresh&has_phone=1&seller_type=private&sort=price&order=asc",
+      "listing_id": null,
+      "listing": null
+    },
+    {
+      "at": "2026-09-18T13:03:40+03:00",
+      "user": "yulia",
+      "action": "view_card",
+      "action_uk": "відкрив(ла) картку",
+      "path": "/api/listings/104",
+      "query": "",
+      "listing_id": 104,
+      "listing": {
+        "title": "4 кімнати в кам'яниці, Ольбін, під ремонт, високі стелі",
+        "osiedle": "Ołbin"
+      }
+    },
+    {
+      "at": "2026-09-18T13:05:15+03:00",
+      "user": "yulia",
+      "action": "translate",
+      "action_uk": "переклад",
+      "path": "/api/listings/104/translate",
+      "query": "",
+      "listing_id": 104,
+      "listing": {
+        "title": "4 кімнати в кам'яниці, Ольбін, під ремонт, високі стелі",
+        "osiedle": "Ołbin"
+      }
+    },
+    {
+      "at": "2026-09-18T13:20:00+03:00",
+      "user": "yulia",
+      "action": "search",
+      "action_uk": "пошук у каталозі",
+      "path": "/api/listings",
+      "query": "offer_type=rent&q=umeblowane&active=0&custom_flag=1",
+      "listing_id": null,
+      "listing": null
+    },
+    {
+      "at": "2026-09-17T19:10:00+03:00",
+      "user": "admin",
+      "action": "view_card",
+      "action_uk": "відкрив(ла) картку",
+      "path": "/api/listings/101",
+      "query": "",
+      "listing_id": 101,
+      "listing": {
+        "title": "Квартира 3 кімн. Кшики, після ремонту, балкон",
+        "osiedle": "Gaj"
+      }
+    },
+    {
+      "at": "2026-09-17T19:12:30+03:00",
+      "user": "admin",
+      "action": "manual",
+      "action_uk": "ручна правка",
+      "path": "/api/listings/101/manual",
+      "query": "",
+      "listing_id": 101,
+      "listing": {
+        "title": "Квартира 3 кімн. Кшики, після ремонту, балкон",
+        "osiedle": "Gaj"
+      }
+    },
+    {
+      "at": "2026-09-17T19:14:00+03:00",
+      "user": "admin",
+      "action": "detach",
+      "action_uk": "від'єднання дубля",
+      "path": "/api/listings/155/detach",
+      "query": "",
+      "listing_id": 155,
+      "listing": null
+    },
+    {
+      "at": "2026-09-17T19:20:00+03:00",
+      "user": "admin",
+      "action": "export",
+      "action_uk": "експорт",
+      "path": "/api/export",
+      "query": "offer_type=sale&discount_min=15&sort=discount&order=desc&format=csv",
+      "listing_id": null,
+      "listing": null
+    },
+    {
+      "at": "2026-09-16T09:00:00+03:00",
+      "user": "admin",
+      "action": "other",
+      "action_uk": "інше",
+      "path": "/api/recompute",
+      "query": "",
+      "listing_id": null,
+      "listing": null
+    },
+    {
+      "at": "2026-09-16T09:01:00+03:00",
+      "user": "admin",
+      "action": "view_card",
+      "action_uk": "відкрив(ла) картку",
+      "path": "/api/listings/102",
+      "query": "",
+      "listing_id": 102,
+      "listing": {
+        "title": "2 кімнати, Губи, без посередників, можна заселятися",
+        "osiedle": "Huby"
+      }
+    }
+  ],
+  "per_user": {
+    "yulia": 42,
+    "admin": 7
+  },
+  "days": 14
+}
