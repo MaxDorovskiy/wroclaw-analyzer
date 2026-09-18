@@ -15,7 +15,8 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
-from ..config import OTODOM_AD_URL, OTODOM_PAGE_SIZE, OTODOM_SEARCH
+from .. import geo
+from ..config import OTODOM_AD_URL, OTODOM_CITY_ID, OTODOM_PAGE_SIZE, OTODOM_SEARCH
 from ..tz import WARSAW
 from .base import Page, RawListing, Source, parse_dt
 
@@ -96,25 +97,64 @@ def find_ad(data: dict) -> dict:
     raise ValueError(u"объявление (pageProps.ad) не найдено")
 
 
+def flatten_items(items: List[dict]) -> Iterator[dict]:
+    """Записи выдачи вместе со свёрнутыми в них квартирами. Otodom прячет квартиры
+    застройщика внутрь записи-инвестиции (relatedAds, форма та же — AdvertListItem):
+    на стр. 100 продажи 18.09.2026 было 13 записей вместо 72, а остальные 62 квартиры
+    лежали в relatedAds двух инвестиций. Без разворота первый прогон собрал 5.4 тыс.
+    объявлений из 9.5 тыс.: первые 46 страниц по 73, дальше — по 2-40."""
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        yield it
+        for rel in it.get("relatedAds") or []:
+            if isinstance(rel, dict):
+                yield rel
+
+
 def _name(v: Any) -> Optional[str]:
     if isinstance(v, dict):
         return v.get("name") or v.get("fullName") or v.get("label")
     return v if isinstance(v, str) else None
 
 
+def _rg_locations(loc: Optional[dict]) -> List[dict]:
+    rg = (loc or {}).get("reverseGeocoding") or {}
+    return [l for l in rg.get("locations") or [] if isinstance(l, dict)]
+
+
 def _loc_names(loc: dict) -> List[str]:
-    names: List[str] = []
+    """Цепочка мест: reverseGeocoding — то, что площадка определила по точке на
+    карте (воеводство -> город -> дзельница -> под-район). Адрес — то, что вписал
+    продавец (в живой выдаче там только город и воеводство); он идёт запасным
+    путём, иначе имя дзельницы из адреса задваивалось бы и читалось как
+    одноимённый под-район (см. geo.SAME_NAME_PART)."""
+    names = [n for n in (_name(l) for l in _rg_locations(loc)) if n]
+    if names:
+        return names
     addr = (loc or {}).get("address") or {}
     for key in ("province", "city", "district", "subdistrict", "quarter"):
         n = _name(addr.get(key))
         if n:
             names.append(n)
-    rg = (loc or {}).get("reverseGeocoding") or {}
-    for l in rg.get("locations") or []:
-        n = _name(l)
-        if n:
-            names.append(n)
     return names
+
+
+def outside_city(loc: Optional[dict]) -> bool:
+    """Точка объявления — не во Вроцлаве. Продавцы пригородов вписывают город
+    «Wrocław», чтобы попасть в городскую выдачу, но reverseGeocoding честен:
+    county «wrocławski» -> commune «Siechnice» -> «Iwiny» вместо
+    dolnoslaskie/wroclaw/wroclaw/wroclaw. В первом прогоне таких 0.6%, медиана
+    11.7 тыс. zł/м² против 13.6 тыс. в городе: без дзельницы они сравнивались с
+    общегородским пулом и получали ложную «скидку» ~14% — прямо в топ выгодных.
+    Судим только по ПОЛОЖИТЕЛЬНОМУ признаку — записи уровня city_or_village: нет
+    её (нет reverseGeocoding, площадка переименовала уровни) — объявление
+    остаётся. Обратное правило («нет id города — значит, не город») при смене
+    формата молча обнулило бы весь источник, а через 3 дня — и каталог."""
+    for l in _rg_locations(loc):
+        if (l.get("locationLevel") or "").lower() == "city_or_village":
+            return l.get("id") != OTODOM_CITY_ID and geo.norm(_name(l)) != "wroclaw"
+    return False
 
 
 def _street(loc: dict) -> Optional[str]:
@@ -180,7 +220,7 @@ class Otodom(Source):
                 total_pages = int(pagination.get("totalPages") or 0)
             except (TypeError, ValueError):
                 total_pages = 0
-            parsed = [x for x in (self.parse_item(it, offer_type) for it in items) if x]
+            parsed = [x for x in (self.parse_item(it, offer_type) for it in flatten_items(items)) if x]
             yield page, (total_pages or page), parsed
             if not items or (total_pages and page >= total_pages):
                 break
@@ -196,6 +236,10 @@ class Otodom(Source):
         # отдельная сущность (DEFERRED §5), в каталоге квартир она была бы пустой строкой
         # и зря тратила бы карточку в хвосте.
         if (it.get("estate") or "FLAT") != "FLAT":
+            self.skipped["investment"] = self.skipped.get("investment", 0) + 1
+            return None
+        if outside_city(it.get("location")):
+            self.skipped["outside"] = self.skipped.get("outside", 0) + 1
             return None
         slug = it.get("slug") or ""
         # без slug адрес не построить: код в URL не выводится из числового id
@@ -236,7 +280,8 @@ class Otodom(Source):
             posted_at=parse_local_dt(it.get("createdAtFirst") or it.get("dateCreatedFirst")
                                      or it.get("dateCreated")),
             refreshed_at=parse_local_dt(it.get("pushedUpAt") or it.get("dateCreated")),
-            raw=it, needs_details=True,
+            # вложенные объявления идут своими строками — в raw_json родителя они балласт
+            raw={k: v for k, v in it.items() if k != "relatedAds"}, needs_details=True,
         )
         if it.get("shortDescription") and not r.description:
             pass  # короткий текст выдачи не заменяет описание — ждём карточку

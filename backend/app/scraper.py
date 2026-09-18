@@ -41,6 +41,8 @@ PROTECTED = {"condition_override", "osiedle_override", "note", "is_favorite",
              "translate_provider", "translate_version"}
 # что даёт только карточка — списком выдачи не затирать
 DETAILS_ONLY = {"description_pl", "characteristics_json", "raw_json"}
+# причины Source.skipped — для сообщения прогона
+SKIP_LABELS = {"investment": u"инвестиций целиком", "outside": u"вне Вроцлава"}
 
 
 # ---------- состояние ----------
@@ -373,6 +375,9 @@ def run_scrape(kind: str = "sale", sources: str = "all", dump: bool = False) -> 
                 notes.append(u"%s: %s" % (name, e))
                 log.error("%s: %s\n%s", name, e, traceback.format_exc())
                 db.rollback()
+            if src.skipped:
+                notes.append(u"%s: не взято — %s" % (name, u", ".join(
+                    u"%s %d" % (SKIP_LABELS.get(k, k), n) for k, n in sorted(src.skipped.items()))))
         now = datetime.utcnow()
         for name in completed:
             run.removed += mark_removed(db, kind, name, now)

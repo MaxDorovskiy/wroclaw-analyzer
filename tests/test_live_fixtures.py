@@ -17,7 +17,7 @@ from app import fetcher as fetcher_mod
 from app.fetcher import Fetcher, fingerprint_blocked, looks_blocked
 from app.normalize import normalize, parse_floor
 from app.sources.olx import Olx, next_offset
-from app.sources.otodom import Otodom, find_search_block, parse_local_dt
+from app.sources.otodom import Otodom, find_search_block, flatten_items, parse_local_dt
 
 
 def _json(fixtures, name):
@@ -45,6 +45,23 @@ def test_otodom_live_search(fixtures):
     b = normalize(raws[1])
     assert b["floor"] == 6 and b["seller_type"] == "private" and b["seller_id"] is None   # "SIXTH", частник без agency
     assert b["osiedle"] == u"Gądów-Popowice Płd." and b["street"] == "bulw. Dedala"
+
+
+def test_otodom_units_folded_into_investment_are_collected(fixtures):
+    """Квартиры застройщика Otodom сворачивает в relatedAds инвестиции: на стр. 100
+    было 13 записей вместо 72, и первый прогон собрал 5.4 тыс. объявлений из 9.5 тыс."""
+    items, _ = find_search_block(_json(fixtures, "otodom_search_live.json"))
+    assert len(items) == 3 and len(items[2]["relatedAds"]) == 2
+    flat = list(flatten_items(items))
+    assert [it["id"] for it in flat] == [70000001, 70000002, 70000003, 70000301, 70000302]
+    src = Otodom()
+    raws = [r for r in (src.parse_item(it, "sale") for it in flat) if r]
+    assert [r.source_id for r in raws] == ["70000001", "70000002", "70000301", "70000302"]
+    assert src.skipped == {"investment": 1}
+    unit = normalize(raws[3])
+    assert unit["price_pln"] == 1220070 and unit["area"] == 91.05 and unit["rooms"] == 4 and unit["floor"] == 3
+    assert unit["osiedle"] == "Grabiszyn-Grabiszynek" and unit["seller_type"] == "developer"
+    assert "relatedAds" not in raws[0].raw                  # вложенные не дублируются в raw_json
 
 
 def test_otodom_live_ad(fixtures):
@@ -93,6 +110,51 @@ def test_floor_words_and_local_time():
     assert parse_local_dt("2026-01-15 10:00:00") == datetime(2026, 1, 15, 9, 0, 0)
     assert parse_local_dt("2026-09-17T22:15:14+02:00") == datetime(2026, 9, 17, 20, 15, 14)
     assert parse_local_dt(None) is None and parse_local_dt("") is None
+
+
+def test_otodom_skips_listings_outside_city(fixtures):
+    """Пригород, помеченный городом «Wrocław»: reverseGeocoding выдаёт county/commune
+    вместо id города (живой пример — Iwiny, gmina Siechnice)."""
+    items, _ = find_search_block(_json(fixtures, "otodom_search_live.json"))
+    it = copy.deepcopy(items[0])
+    assert it["location"]["address"]["city"]["name"] == u"Wrocław"
+    it["location"]["reverseGeocoding"]["locations"] = [
+        {"id": "dolnoslaskie", "name": u"dolnośląskie", "locationLevel": "voivodeship"},
+        {"id": "dolnoslaskie/wroclawski", "name": u"wrocławski", "locationLevel": "county"},
+        {"id": "dolnoslaskie/wroclawski/siechnice", "name": "Siechnice", "locationLevel": "commune"},
+        {"id": "dolnoslaskie/wroclawski/siechnice/iwiny", "name": "Iwiny", "locationLevel": "city_or_village"},
+    ]
+    src = Otodom()
+    assert src.parse_item(it, "sale") is None and src.parse_item(items[2], "sale") is None
+    assert src.skipped == {"outside": 1, "investment": 1}
+    assert src.parse_item(items[0], "sale") is not None            # городское — берём
+    no_rg = copy.deepcopy(items[0])
+    no_rg["location"]["reverseGeocoding"] = None
+    assert src.parse_item(no_rg, "sale") is not None               # не знаем, где — не выбрасываем
+
+
+def test_geo_official_list_and_same_name_parts():
+    from collections import Counter
+
+    from app import geo
+    # официальный список geoportal.wroclaw.pl/poi/rejon/7 — 48 осиедле, разбивка по бывшим дзельницам
+    assert len(geo.OSIEDLA) == 48 and len(set(n for n, _, _ in geo.OSIEDLA)) == 48
+    assert Counter(d for _, d, _ in geo.OSIEDLA) == {"Fabryczna": 14, "Krzyki": 14, "Psie Pole": 12,
+                                                     u"Śródmieście": 5, "Stare Miasto": 3}
+    assert geo.district_of(u"Kleczków") == "Psie Pole" and geo.district_of("Gajowice") == "Fabryczna"
+    assert geo.district_of(u"Przedmieście Oławskie") == "Krzyki"
+    w = [u"dolnośląskie", u"Wrocław"]
+    # имя дзельницы второй раз — одноимённый под-район (так пишет Otodom)
+    assert geo.resolve(w + ["Krzyki", "Krzyki"]) == ("Krzyki", "Krzyki-Partynice", [])
+    assert geo.resolve(w + ["Psie Pole", "Psie Pole"]) == ("Psie Pole", "Psie Pole-Zawidawie", [])
+    assert geo.resolve(w + ["Stare Miasto", "Stare Miasto"]) == ("Stare Miasto", "Stare Miasto", [])
+    assert geo.resolve(w + [u"Śródmieście", u"Śródmieście"]) == (u"Śródmieście", None, [])
+    # одиночная дзельница (так пишет OLX) осиедле не даёт — в Stare Miasto их три
+    assert geo.resolve([u"Dolnośląskie", u"Wrocław", "Stare Miasto"]) == ("Stare Miasto", None, [])
+    # Zakrzów — не осиедле, а часть Psie Pole-Zawidawie; Mokra — часть Leśnica
+    assert geo.resolve(w + ["Psie Pole", u"Zakrzów"]) == ("Psie Pole", "Psie Pole-Zawidawie", [])
+    assert geo.resolve(w + ["Fabryczna", "Mokra"]) == ("Fabryczna", u"Leśnica", [])
+    assert geo.resolve(w + ["Krzyki", "Nibylandia"]) == ("Krzyki", None, ["Nibylandia"])
 
 
 # ---------- OLX ----------

@@ -13,7 +13,9 @@ function Log($m) { Add-Content -Path $log -Encoding UTF8 -Value ("{0} [{1}] {2}"
 # обрезка лога: при 5 МБ оставить последние 5000 строк. Скобки обязательны:
 # без них Set-Content открывает файл, пока Get-Content его ещё читает («файл занят»)
 if ((Test-Path $log) -and ((Get-Item $log).Length -gt 5MB)) { (Get-Content $log -Tail 5000 -Encoding UTF8) | Set-Content $log -Encoding UTF8 }
-$jitter = Get-Random -Minimum 0 -Maximum ($MaxJitterMin * 60)
+# -MaxJitterMin 0 (ручной запуск «прямо сейчас»): Get-Random с Minimum = Maximum
+# падает с ошибкой, и в Start-Sleep уходил $null
+$jitter = if ($MaxJitterMin -gt 0) { Get-Random -Minimum 0 -Maximum ($MaxJitterMin * 60) } else { 0 }
 Log "жду $jitter с"
 Start-Sleep -Seconds $jitter
 $pair = "{0}:{1}" -f $env:WRO_WEB_USER, $env:WRO_WEB_PASS

@@ -19,6 +19,7 @@ from app.models import Listing, ScrapeRun  # noqa: E402
 from app.scraper import PROTECTED, flush_unknown  # noqa: E402
 from app.normalize import normalize  # noqa: E402
 from app.sources import RawListing, get_source  # noqa: E402
+from app.sources.otodom import outside_city  # noqa: E402
 
 
 def main():
@@ -33,7 +34,7 @@ def main():
         q = q.filter(Listing.source == args.source)
     if args.limit:
         q = q.limit(args.limit)
-    n = changed = 0
+    n = changed = dropped = 0
     unknown = {}
     for row in q.yield_per(200):
         try:
@@ -42,11 +43,20 @@ def main():
             continue
         src = get_source(row.source)
         if row.source == "otodom" and "characteristics" in raw_obj:
-            raw = RawListing(source=row.source, source_id=row.source_id, url=row.url, offer_type=row.offer_type)
-            raw = src.apply_ad(raw, raw_obj)
+            if outside_city(raw_obj.get("location")):
+                raw = None
+            else:
+                raw = RawListing(source=row.source, source_id=row.source_id, url=row.url, offer_type=row.offer_type)
+                raw = src.apply_ad(raw, raw_obj)
         else:
             raw = src.parse_item(raw_obj, row.offer_type)
         if raw is None:
+            # адаптер такое больше не берёт (пригород, инвестиция целиком): прогоны эту
+            # строку уже не увидят, а до снятия «не видели 3 дня» она портила бы пулы
+            if row.is_active:
+                row.is_active = False
+                row.removed_at = datetime.utcnow()
+                dropped += 1
             continue
         d = normalize(raw)
         unknown_places = d.pop("_unknown_places", [])
@@ -64,7 +74,8 @@ def main():
             print(u"%d разобрано, %d полей изменено" % (n, changed))
     db.commit()
     flush_unknown(db, unknown)
-    print(u"готово: %d разобрано, %d полей изменено; пересчитать: POST /api/recompute" % (n, changed))
+    print(u"готово: %d разобрано, %d полей изменено, %d снято (адаптер их больше не берёт); "
+          u"пересчитать: POST /api/recompute" % (n, changed, dropped))
 
 
 if __name__ == "__main__":

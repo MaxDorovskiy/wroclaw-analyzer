@@ -40,6 +40,9 @@ OTODOM_PAGE_SIZE = 72
 # slug на выдаче уже оканчивается на «-ID<код>» (код в URL буквенно-цифровой и
 # НЕ равен числовому id из JSON) — поэтому адрес карточки строится из slug
 OTODOM_AD_URL = "https://www.otodom.pl/pl/oferta/{slug}"
+# id города в reverseGeocoding выдачи: по нему отличаем Вроцлав от пригородов,
+# которые продавцы помечают городом (см. otodom.outside_city)
+OTODOM_CITY_ID = "dolnoslaskie/wroclaw/wroclaw/wroclaw"
 
 # ---------- OLX ----------
 # Публичный JSON API, которым ходит сам сайт. Id категорий и города со
@@ -92,6 +95,11 @@ DEFAULT_SETTINGS = {
     "translate_provider": "ollama",          # ollama | anthropic | google | deepl | none
     "translate_ollama_url": "http://127.0.0.1:11434",
     "translate_ollama_model": "gemma3:12b",
+    # Окно контекста запроса к Ollama. Если ту же модель на этой карте уже держит
+    # другая система (киевский ремонт), ставить ЕЁ значение (колонка CONTEXT в
+    # `ollama ps`): при несовпадении Ollama перезагружает модель на КАЖДЫЙ запрос —
+    # замер 18.09.2026 на RTX 5070 Ti: 15-25 с загрузки против 0.0 с при совпадении.
+    "translate_ollama_num_ctx": "8192",
     "translate_anthropic_model": "claude-opus-5",
     "translate_anthropic_key": "",
     "translate_google_key": "",
@@ -122,7 +130,7 @@ DEFAULT_SETTINGS = {
 # пока её ключ не внесён сюда — поле в интерфейсе будет молча ничего не
 # делать (грабли из Киева).
 SAFE_KEYS = {
-    "translate_provider", "translate_ollama_url", "translate_ollama_model",
+    "translate_provider", "translate_ollama_url", "translate_ollama_model", "translate_ollama_num_ctx",
     "translate_anthropic_model", "translate_anthropic_key", "translate_google_key",
     "translate_deepl_key", "translate_daily_cap", "translate_enabled",
     "deal_threshold_pct", "renovation_cost_sqm_pln",

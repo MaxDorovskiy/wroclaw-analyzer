@@ -470,7 +470,305 @@
        "shortDescription": "(skrócony opis z wyników — adapter go nie czyta, w fiksturze pominięty)",
        "tags": [],
        "__typename": "AdvertListItem",
-       "relatedAds": null,
+       "relatedAds": [
+        {
+         "id": 70000301,
+         "title": "Apartament 160m² (B.9.M.04) | Opcja pod wielopak (4 kawalerki)",
+         "slug": "apartament-160m-b-9-m-04-opcja-pod-wielopak-4-kawalerki-ID4test301",
+         "estate": "FLAT",
+         "developmentId": 70009000,
+         "developmentTitle": null,
+         "developmentUrl": null,
+         "transaction": "SELL",
+         "location": {
+          "mapDetails": {
+           "radius": 0,
+           "__typename": "MapDetails"
+          },
+          "address": {
+           "street": {
+            "name": "al. gen. Józefa Hallera",
+            "number": "",
+            "__typename": "Street"
+           },
+           "city": {
+            "name": "Wrocław",
+            "__typename": "City"
+           },
+           "province": {
+            "name": "dolnośląskie",
+            "__typename": "Province"
+           },
+           "__typename": "Address"
+          },
+          "reverseGeocoding": {
+           "locations": [
+            {
+             "id": "dolnoslaskie",
+             "name": "dolnośląskie",
+             "locationLevel": "voivodeship",
+             "fullName": "dolnośląskie",
+             "__typename": "BasicLocationObject"
+            },
+            {
+             "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw",
+             "name": "Wrocław",
+             "locationLevel": "city_or_village",
+             "fullName": "Wrocław, dolnośląskie",
+             "__typename": "BasicLocationObject"
+            },
+            {
+             "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw/fabryczna",
+             "name": "Fabryczna",
+             "locationLevel": "district",
+             "fullName": "Fabryczna, Wrocław, dolnośląskie",
+             "__typename": "BasicLocationObject"
+            },
+            {
+             "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw/fabryczna/grabiszyn",
+             "name": "Grabiszyn",
+             "locationLevel": "residential",
+             "fullName": "Grabiszyn, Fabryczna, Wrocław, dolnośląskie",
+             "__typename": "BasicLocationObject"
+            }
+           ],
+           "__typename": "ReverseGeocoding"
+          },
+          "__typename": "LocationDetails"
+         },
+         "images": [
+          {
+           "medium": "https://example.invalid/otodom/301-0-medium.jpg",
+           "large": "https://example.invalid/otodom/301-0-large.jpg",
+           "__typename": "AdvertListItemImage"
+          },
+          {
+           "medium": "https://example.invalid/otodom/301-1-medium.jpg",
+           "large": "https://example.invalid/otodom/301-1-large.jpg",
+           "__typename": "AdvertListItemImage"
+          }
+         ],
+         "totalPossibleImages": 8,
+         "isExclusiveOffer": false,
+         "isPrivateOwner": false,
+         "isPromoted": false,
+         "extendedAdvertiserType": null,
+         "source": "urn:site:local",
+         "agency": {
+          "id": 1301,
+          "name": "Biuro Nieruchomości 301",
+          "type": "DEVELOPER",
+          "slug": "biuro-301-ID1301",
+          "imageUrl": null,
+          "brandingVisible": false,
+          "highlightedAds": false,
+          "__typename": "AgencyListingDetails"
+         },
+         "openDays": null,
+         "totalPrice": {
+          "value": 2241820,
+          "currency": "PLN",
+          "__typename": "Money"
+         },
+         "rentPrice": null,
+         "priceFromPerSquareMeter": null,
+         "pricePerSquareMeter": {
+          "value": 14000,
+          "currency": "PLN",
+          "__typename": "Money"
+         },
+         "areaInSquareMeters": 160.13,
+         "terrainAreaInSquareMeters": null,
+         "roomsNumber": "FOUR",
+         "hidePrice": false,
+         "floorNumber": "EIGHTH",
+         "investmentState": null,
+         "investmentUnitsAreaInSquareMeters": null,
+         "peoplePerRoom": null,
+         "dateCreated": "2026-09-18 10:27:01",
+         "createdAtFirst": "2026-09-18T10:26:56Z",
+         "investmentUnitsNumber": null,
+         "investmentUnitsRoomsNumber": null,
+         "investmentUnitsFloorsRange": null,
+         "investmentEstimatedDelivery": null,
+         "pushedUpAt": null,
+         "specialOffer": null,
+         "shortDescription": "(skrócony opis z wyników — adapter go nie czyta, w fiksturze pominięty)",
+         "organisationAssignedMember": null,
+         "advertOwner": {
+          "name": "Doradca",
+          "imageUrl": null,
+          "__typename": "LegacyAdvertOwner"
+         },
+         "tags": [
+          {
+           "value": "BALCONY",
+           "weight": 35,
+           "__typename": "AdvertListItemTag"
+          },
+          {
+           "value": "TOP_FLOOR",
+           "weight": 20,
+           "__typename": "AdvertListItemTag"
+          },
+          {
+           "value": "PARKING_SPOT",
+           "weight": 15,
+           "__typename": "AdvertListItemTag"
+          }
+         ],
+         "__typename": "AdvertListItem",
+         "showPremiumTile": false,
+         "development": null,
+         "href": "[lang]/ad/apartament-160m-b-9-m-04-opcja-pod-wielopak-4-kawalerki-ID4test301"
+        },
+        {
+         "id": 70000302,
+         "title": "Apartament 91,05 m² (B.4.M.02) | Grabiszyńska, Krzyki, Wrocław",
+         "slug": "apartament-91-05-m-b-4-m-02-grabiszynska-krzyki-wroclaw-ID4test302",
+         "estate": "FLAT",
+         "developmentId": 70009000,
+         "developmentTitle": null,
+         "developmentUrl": null,
+         "transaction": "SELL",
+         "location": {
+          "mapDetails": {
+           "radius": 0,
+           "__typename": "MapDetails"
+          },
+          "address": {
+           "street": {
+            "name": "al. gen. Józefa Hallera",
+            "number": "",
+            "__typename": "Street"
+           },
+           "city": {
+            "name": "Wrocław",
+            "__typename": "City"
+           },
+           "province": {
+            "name": "dolnośląskie",
+            "__typename": "Province"
+           },
+           "__typename": "Address"
+          },
+          "reverseGeocoding": {
+           "locations": [
+            {
+             "id": "dolnoslaskie",
+             "name": "dolnośląskie",
+             "locationLevel": "voivodeship",
+             "fullName": "dolnośląskie",
+             "__typename": "BasicLocationObject"
+            },
+            {
+             "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw",
+             "name": "Wrocław",
+             "locationLevel": "city_or_village",
+             "fullName": "Wrocław, dolnośląskie",
+             "__typename": "BasicLocationObject"
+            },
+            {
+             "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw/fabryczna",
+             "name": "Fabryczna",
+             "locationLevel": "district",
+             "fullName": "Fabryczna, Wrocław, dolnośląskie",
+             "__typename": "BasicLocationObject"
+            },
+            {
+             "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw/fabryczna/grabiszyn",
+             "name": "Grabiszyn",
+             "locationLevel": "residential",
+             "fullName": "Grabiszyn, Fabryczna, Wrocław, dolnośląskie",
+             "__typename": "BasicLocationObject"
+            }
+           ],
+           "__typename": "ReverseGeocoding"
+          },
+          "__typename": "LocationDetails"
+         },
+         "images": [
+          {
+           "medium": "https://example.invalid/otodom/302-0-medium.jpg",
+           "large": "https://example.invalid/otodom/302-0-large.jpg",
+           "__typename": "AdvertListItemImage"
+          },
+          {
+           "medium": "https://example.invalid/otodom/302-1-medium.jpg",
+           "large": "https://example.invalid/otodom/302-1-large.jpg",
+           "__typename": "AdvertListItemImage"
+          }
+         ],
+         "totalPossibleImages": 7,
+         "isExclusiveOffer": false,
+         "isPrivateOwner": false,
+         "isPromoted": false,
+         "extendedAdvertiserType": null,
+         "source": "urn:site:local",
+         "agency": {
+          "id": 1302,
+          "name": "Biuro Nieruchomości 302",
+          "type": "DEVELOPER",
+          "slug": "biuro-302-ID1302",
+          "imageUrl": null,
+          "brandingVisible": false,
+          "highlightedAds": false,
+          "__typename": "AgencyListingDetails"
+         },
+         "openDays": null,
+         "totalPrice": {
+          "value": 1220070,
+          "currency": "PLN",
+          "__typename": "Money"
+         },
+         "rentPrice": null,
+         "priceFromPerSquareMeter": null,
+         "pricePerSquareMeter": {
+          "value": 13400,
+          "currency": "PLN",
+          "__typename": "Money"
+         },
+         "areaInSquareMeters": 91.05,
+         "terrainAreaInSquareMeters": null,
+         "roomsNumber": "FOUR",
+         "hidePrice": false,
+         "floorNumber": "THIRD",
+         "investmentState": null,
+         "investmentUnitsAreaInSquareMeters": null,
+         "peoplePerRoom": null,
+         "dateCreated": "2026-09-18 10:22:05",
+         "createdAtFirst": "2026-09-18T10:21:14Z",
+         "investmentUnitsNumber": null,
+         "investmentUnitsRoomsNumber": null,
+         "investmentUnitsFloorsRange": null,
+         "investmentEstimatedDelivery": null,
+         "pushedUpAt": null,
+         "specialOffer": null,
+         "shortDescription": "(skrócony opis z wyników — adapter go nie czyta, w fiksturze pominięty)",
+         "organisationAssignedMember": null,
+         "advertOwner": {
+          "name": "Doradca",
+          "imageUrl": null,
+          "__typename": "LegacyAdvertOwner"
+         },
+         "tags": [
+          {
+           "value": "BALCONY",
+           "weight": 35,
+           "__typename": "AdvertListItemTag"
+          },
+          {
+           "value": "PARKING_SPOT",
+           "weight": 15,
+           "__typename": "AdvertListItemTag"
+          }
+         ],
+         "__typename": "AdvertListItem",
+         "showPremiumTile": false,
+         "development": null,
+         "href": "[lang]/ad/apartament-91-05-m-b-4-m-02-grabiszynska-krzyki-wroclaw-ID4test302"
+        }
+       ],
        "href": "[lang]/ad/grabiszynska-apartamenty-lokale-uslugowe-wroclaw-ID4test3"
       }
      ],

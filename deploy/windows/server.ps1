@@ -23,6 +23,6 @@ while ($true) {
     $null = $p.Handle
     Set-Content -Path (Join-Path $env:WRO_DATA "server.pid") -Value $p.Id
     $p.WaitForExit()
-    Add-Content -Path (Join-Path $env:WRO_DATA "server-restarts.log") -Value ("{0} uvicorn вышел с кодом {1}, перезапуск через 5 с" -f (Get-Date -Format s), $p.ExitCode)
+    Add-Content -Path (Join-Path $env:WRO_DATA "server-restarts.log") -Encoding UTF8 -Value ("{0} uvicorn вышел с кодом {1}, перезапуск через 5 с" -f (Get-Date -Format s), $p.ExitCode)
     Start-Sleep -Seconds 5
 }

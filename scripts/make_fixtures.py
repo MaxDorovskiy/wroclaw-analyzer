@@ -88,21 +88,25 @@ def otodom_item(it, n):
     it["images"] = [{"medium": "https://example.invalid/otodom/%d-%d-medium.jpg" % (n, i),
                      "large": "https://example.invalid/otodom/%d-%d-large.jpg" % (n, i),
                      "__typename": "AdvertListItemImage"} for i in range(min(2, len(it.get("images") or [])))]
-    for k in ("development", "developmentTitle", "developmentUrl", "specialOffer", "relatedAds", "openDays"):
+    for k in ("development", "developmentTitle", "developmentUrl", "specialOffer", "openDays"):
         if k in it:
             it[k] = None
     if it.get("developmentId"):
         it["developmentId"] = 70009000
+    # свёрнутые в инвестицию квартиры: оставляем две, с теми же заменами
+    if isinstance(it.get("relatedAds"), list):
+        it["relatedAds"] = [otodom_item(r, n * 100 + j + 1) for j, r in enumerate(it["relatedAds"][:2])]
     street = ((it.get("location") or {}).get("address") or {}).get("street")
     if isinstance(street, dict):
         street["number"] = ""
     return it
 
 
-def otodom_search(html, picks):
-    data = extract_next_data(html)
-    sa = data["props"]["pageProps"]["data"]["searchAds"]
-    items = sa["items"]
+def otodom_search(htmls, picks):
+    """htmls — страницы выдачи (первая задаёт pagination); объявления ищем по всем."""
+    blocks = [extract_next_data(h)["props"]["pageProps"]["data"]["searchAds"] for h in htmls]
+    sa = blocks[0]
+    items = [it for b in blocks for it in b["items"]]
     chosen = []
     for want in picks:
         for it in items:
@@ -247,17 +251,19 @@ def main():
         (FIX / name).write_text(json.dumps(obj, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
         made.append(name)
 
-    f = probe / "otodom_sale_page1.html"
-    if f.exists():
-        write("otodom_search_live.json", otodom_search(f.read_text(encoding="utf-8"), [
+    # page1 кладёт проба; глубокие страницы (там инвестиции со свёрнутыми квартирами)
+    # можно доложить руками как otodom_sale_page<N>.html
+    pages = sorted(probe.glob("otodom_sale_page*.html"),
+                   key=lambda p: int(re.search(r"page(\d+)", p.name).group(1)))
+    if pages:
+        write("otodom_search_live.json", otodom_search([p.read_text(encoding="utf-8") for p in pages], [
             lambda it: it.get("estate") == "FLAT" and (it.get("agency") or {}).get("type") == "AGENCY",
             lambda it: it.get("estate") == "FLAT" and it.get("isPrivateOwner"),
-            lambda it: it.get("estate") == "FLAT" and (it.get("agency") or {}).get("type") == "DEVELOPER",
-            lambda it: it.get("estate") == "INVESTMENT",
+            lambda it: it.get("estate") == "INVESTMENT" and it.get("relatedAds"),
         ]))
     f = probe / "otodom_rent_page1.html"
     if f.exists():
-        write("otodom_search_rent_live.json", otodom_search(f.read_text(encoding="utf-8"), [
+        write("otodom_search_rent_live.json", otodom_search([f.read_text(encoding="utf-8")], [
             lambda it: (it.get("rentPrice") or {}).get("value"),
             lambda it: it.get("rentPrice") is None,
             lambda it: it.get("rentPrice") is not None and not it["rentPrice"].get("value"),

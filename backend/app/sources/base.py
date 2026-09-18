@@ -69,6 +69,11 @@ class Source:
     name = ""
     needs_details = False
 
+    def __init__(self):
+        # что адаптер сознательно не взял (причина -> сколько): попадает в сообщение
+        # прогона, чтобы «пропущено» было видно владельцу, а не тонуло молча
+        self.skipped: Dict[str, int] = {}
+
     def iter_pages(self, offer_type: str, fetcher, start_page: int = 1,
                    settings: Optional[Dict[str, str]] = None) -> Iterator[Page]:
         raise NotImplementedError

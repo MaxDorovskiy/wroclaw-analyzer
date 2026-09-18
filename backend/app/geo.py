@@ -5,11 +5,17 @@ Osiedle — единица аналитики (медианы, пулы выго
 единственное, что отдаёт OLX. Украинская транскрипция нужна для показа рядом
 с оригиналом («Krzyki · Кшики»), а не вместо него.
 
-ВНИМАНИЕ: соответствие осиедле → дзельница проставлено по памяти, среда
-разработки не имела доступа к geoportal.wroclaw.pl. Официально осиедле 48
-(Fabryczna 14, Krzyki 14, Psie Pole 12, Śródmieście 5, Stare Miasto 3), а в
-списке ниже 49 имён — одно из них либо не самостоятельное, либо отнесено не
-туда. Сомнительные помечены «?». Сверить: https://geoportal.wroclaw.pl/osiedla/
+Сверено 18.09.2026:
+- список — с официальным (geoportal.wroclaw.pl/poi/rejon/7, 48 осиедле). Был
+  лишний «Zakrzów»: это часть Psie Pole-Zawidawie, теперь он в ALIASES;
+- осиедле → бывшая дзельница. Геопортал этого не даёт: дзельницы упразднены в
+  1991 г. и существуют только как привычные районы. Привязка сверена по
+  таблице «Dawna dzielnica» в pl.wikipedia «Podział administracyjny Wrocławia»
+  (Fabryczna 14, Krzyki 14, Psie Pole 12, Śródmieście 5, Stare Miasto 3) и по
+  самому Otodom: у 9411 объявлений первого прогона (встретились все 48
+  осиедле, 70 имён под-районов) дзельница из источника ни разу не разошлась
+  с этой таблицей. Три бывших «?» подтверждены: Przedmieście Oławskie —
+  Krzyki (569 объявлений), Gajowice — Fabryczna (288), Kleczków — Psie Pole (237).
 Незнакомые имена от источников попадают в таблицу unknown_values — по ней
 список и правится.
 """
@@ -49,11 +55,11 @@ OSIEDLA = [
     (u"Księże", u"Krzyki", u"Ксєнже"),
     (u"Ołtaszyn", u"Krzyki", u"Олташин"),
     (u"Powstańców Śląskich", u"Krzyki", u"Повстаньцув Шльонських"),
-    (u"Przedmieście Oławskie", u"Krzyki", u"Пшедмєсьце Олавське"),   # ? (Krzyki или Śródmieście)
+    (u"Przedmieście Oławskie", u"Krzyki", u"Пшедмєсьце Олавське"),
     (u"Tarnogaj", u"Krzyki", u"Тарноґай"),
     (u"Wojszyce", u"Krzyki", u"Войшице"),
     # Fabryczna
-    (u"Gajowice", u"Fabryczna", u"Ґайовіце"),                          # ? (Fabryczna или Krzyki)
+    (u"Gajowice", u"Fabryczna", u"Ґайовіце"),
     (u"Gądów-Popowice Płd.", u"Fabryczna", u"Ґондув-Поповіце Пд."),
     (u"Grabiszyn-Grabiszynek", u"Fabryczna", u"Ґрабішин-Ґрабішинек"),
     (u"Jerzmanowo-Jarnołtów-Strachowice-Osiniec", u"Fabryczna", u"Єжманово-Ярнолтув-Страховіце-Осінєц"),
@@ -69,7 +75,7 @@ OSIEDLA = [
     (u"Żerniki", u"Fabryczna", u"Жернікі"),
     # Psie Pole
     (u"Karłowice-Różanka", u"Psie Pole", u"Карловіце-Ружанка"),
-    (u"Kleczków", u"Psie Pole", u"Клечкув"),                            # ? (Psie Pole или Śródmieście)
+    (u"Kleczków", u"Psie Pole", u"Клечкув"),
     (u"Kowale", u"Psie Pole", u"Ковалє"),
     (u"Lipa Piotrowska", u"Psie Pole", u"Ліпа Пьотровська"),
     (u"Osobowice-Rędzin", u"Psie Pole", u"Особовіце-Рендзін"),
@@ -80,8 +86,16 @@ OSIEDLA = [
     (u"Strachocin-Swojczyce-Wojnów", u"Psie Pole", u"Страхоцін-Свойчице-Войнув"),
     (u"Świniary", u"Psie Pole", u"Свіняри"),
     (u"Widawa", u"Psie Pole", u"Відава"),
-    (u"Zakrzów", u"Psie Pole", u"Закшув"),
 ]
+
+# Под-район с именем дзельницы (Otodom: «… | Krzyki | Krzyki») — часть составного
+# осиедле. В первом прогоне так шли 310 объявлений «Krzyki», 62 «Psie Pole» и
+# 219 «Stare Miasto» из 9411 — первые два вида оставались без осиедле.
+SAME_NAME_PART = {
+    u"Stare Miasto": u"Stare Miasto",
+    u"Krzyki": u"Krzyki-Partynice",
+    u"Psie Pole": u"Psie Pole-Zawidawie",
+}
 
 # Части составных осиедле и обиходные названия -> официальное осиедле.
 # Источники пишут «Popowice», «Sępolno», «Partynice», «Stabłowice» — это
@@ -138,6 +152,29 @@ ALIASES = {
     u"os powstancow slaskich": u"Powstańców Śląskich",
     u"gadow popowice pld": u"Gądów-Popowice Płd.",
     u"pilczyce kozanow popowice pln": u"Pilczyce-Kozanów-Popowice Płn.",
+    # части осиедле по столбцу «jednostki przestrzenne» той же таблицы (см. шапку)
+    u"zakrzow": u"Psie Pole-Zawidawie",          # был ошибочно отдельным осиедле
+    u"zgorzelisko": u"Psie Pole-Zawidawie",
+    u"klokoczyce": u"Psie Pole-Zawidawie",
+    u"mokra": u"Leśnica",                        # встретилась в первом прогоне
+    u"pustki": u"Leśnica",
+    u"zar": u"Leśnica",
+    u"janowek": u"Pracze Odrzańskie",
+    u"nowa karczma": u"Pracze Odrzańskie",
+    u"glinianki": u"Huby",
+    u"ksieze male": u"Księże",
+    u"ksieze wielkie": u"Księże",
+    u"swiatniki": u"Księże",
+    u"opatowice": u"Księże",
+    u"bierdzany": u"Księże",
+    u"nowy dom": u"Księże",
+    u"mirowiec": u"Karłowice-Różanka",
+    u"polanka": u"Karłowice-Różanka",
+    u"popiele": u"Strachocin-Swojczyce-Wojnów",
+    u"dworek": u"Powstańców Śląskich",
+    u"poludnie": u"Powstańców Śląskich",
+    u"nowe miasto": u"Stare Miasto",
+    u"przedmiescie mikolajskie": u"Szczepin",
 }
 
 
@@ -206,14 +243,18 @@ def resolve(names: Iterable[str]) -> Tuple[Optional[str], Optional[str], List[st
     """(дзельница, осиедле, незнакомые имена) по всем именам мест от источника.
 
     Источник даёт цепочку «Dolnośląskie / Wrocław / Krzyki / Gaj» (Otodom) или
-    только «Krzyki» (OLX). Имя из пятёрки дзельниц считается дзельницей, даже
-    если такое же осиедле есть («Stare Miasto»): осиедле с тем же именем
-    берётся лишь когда другого осиедле в цепочке нет. Найденное осиедле
-    сильнее дзельницы источника — у него она бывает просто «Wrocław».
+    только «Krzyki» (OLX). Имя из пятёрки дзельниц — это дзельница. Осиедле из
+    него получается, только когда имя стоит в цепочке ВТОРОЙ раз: тогда это
+    уже под-район (Otodom: «… | Krzyki | Krzyki», «… | Stare Miasto | Stare
+    Miasto») — часть осиедле из SAME_NAME_PART. Одиночное «Stare Miasto» (так
+    пишет OLX, у него только дзельница) осиедле НЕ даёт: в дзельнице их три,
+    и раньше все объявления OLX из Szczepin и Przedmieście Świdnickie
+    записывались в осиедле Stare Miasto. Найденное осиедле сильнее дзельницы
+    источника — у него она бывает просто «Wrocław».
     """
     district = None
     osiedle = None
-    same_name_osiedle = None
+    hits: Dict[str, int] = {}
     unknown = []
     skip = {u"", u"wroclaw", u"dolnoslaskie", u"polska", u"dolnoslaskie wroclaw",
             u"miasto wroclaw", u"wroclaw dolnoslaskie", u"powiat wroclaw",
@@ -230,16 +271,15 @@ def resolve(names: Iterable[str]) -> Tuple[Optional[str], Optional[str], List[st
             d = match_district(part)
             if d:
                 district = district or d
-                if d in _DISTRICT_OF:          # «Stare Miasto» — ещё и осиедле
-                    same_name_osiedle = same_name_osiedle or d
+                hits[d] = hits.get(d, 0) + 1
                 continue
             o = match_osiedle(part)
             if o:
                 osiedle = osiedle or o
                 continue
             unknown.append(part.strip())
-    if not osiedle and same_name_osiedle:
-        osiedle = same_name_osiedle
+    if not osiedle and district and hits.get(district, 0) >= 2:
+        osiedle = SAME_NAME_PART.get(district)
     if osiedle:
         district = district_of(osiedle) or district
     return district, osiedle, unknown

@@ -30,7 +30,9 @@ BASE_SQM = {
     u"Muchobór Wielki": 12600, u"Muchobór Mały": 12200, u"Nowy Dwór": 11500, u"Kuźniki": 11700,
     u"Maślice": 12000, u"Leśnica": 11000, u"Żerniki": 12400, u"Oporów": 12900, u"Pracze Odrzańskie": 10800,
     u"Karłowice-Różanka": 13500, u"Kleczków": 12000, u"Sołtysowice": 11600, u"Psie Pole-Zawidawie": 11300,
-    u"Zakrzów": 11000, u"Lipa Piotrowska": 11400, u"Kowale": 11800,
+    # Widawa стоит на месте «Zakrzów» (это часть Psie Pole-Zawidawie, а не осиедле):
+    # длина и порядок списка прежние — случайная последовательность генератора не съехала
+    u"Widawa": 11000, u"Lipa Piotrowska": 11400, u"Kowale": 11800,
     u"Strachocin-Swojczyce-Wojnów": 11500, u"Osobowice-Rędzin": 11200,
 }
 COND_FACTOR = {"renovated": 1.06, "unknown": 1.0, "to_refresh": 0.93, "developer_bare": 0.96, "to_renovate": 0.84}
