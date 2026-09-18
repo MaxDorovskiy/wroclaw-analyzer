@@ -125,6 +125,39 @@ def test_run_scrape_returns_id_and_reports_skipped(clean_db, fixtures, monkeypat
     assert calls == [("post", False, True), ("translate", False)]
 
 
+def test_gone_card_is_not_retried_forever(clean_db):
+    """Otodom на снятое объявление отвечает 410 Gone (не 404): карточку больше не просим,
+    ошибкой прогона это не считаем. Свежие — по дате подачи, а не по порядку вставки."""
+    import httpx
+
+    db = clean_db
+    now = datetime.utcnow()
+    gone = Listing(source="otodom", source_id="1", offer_type="rent", url="https://x/gone", title_pl="a",
+                   is_active=True, details_fetched=False, posted_at=now, first_seen=now - timedelta(minutes=9))
+    old = Listing(source="otodom", source_id="2", offer_type="rent", url="https://x/old", title_pl="b",
+                  is_active=True, details_fetched=False, posted_at=now - timedelta(days=200), first_seen=now)
+    db.add_all([gone, old])
+    run = ScrapeRun(kind="rent", status="running")
+    db.add(run)
+    db.commit()
+    asked = []
+
+    class Src:
+        name = "otodom"
+
+        def fetch_details(self, raw, fetcher):
+            asked.append(raw.url)
+            req = httpx.Request("GET", raw.url)
+            raise httpx.HTTPStatusError("410", request=req, response=httpx.Response(410, request=req))
+
+    scraper._scrape_details(db, run, Src(), "rent", None, {"details_per_run": "1"}, {})
+    assert asked == ["https://x/gone"]                        # поданное сегодня — первым, хотя вставлено раньше
+    db.refresh(gone)
+    assert gone.details_fetched is True and run.errors == 0
+    scraper._scrape_details(db, run, Src(), "rent", None, {"details_per_run": "1"}, {})
+    assert asked == ["https://x/gone", "https://x/old"]       # второй раз снятое не запрашивается
+
+
 def test_pause_and_watchdog(clean_db):
     db = clean_db
     until = scraper.set_pause(db, 2)

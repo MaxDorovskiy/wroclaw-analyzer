@@ -277,12 +277,18 @@ def _scrape_details(db: Session, run: ScrapeRun, src, kind: str, fetcher, settin
             raise
         except Exception as e:  # noqa: BLE001
             db.rollback()
-            run.errors += 1
-            # 404 = объявление уже снято; не ходить по кругу
-            if "404" in str(e):
+            # 404/410 = объявление сняли между выдачей и карточкой; не ходить по кругу.
+            # Otodom отвечает именно 410 Gone (первый прогон аренды 18.09.2026) — раньше
+            # ловился только 404, и такая карточка запрашивалась бы в каждом прогоне,
+            # пока объявление не снимется само через 3 дня. Это не ошибка прогона.
+            code = getattr(getattr(e, "response", None), "status_code", None)
+            if code in (404, 410):
                 db.execute(update(Listing).where(Listing.id == lid).values(details_fetched=True))
                 db.commit()
-            log.warning("карточка %s: %s", row.url, e)
+                log.info("карточка %s: %s — объявление снято", row.url, code)
+            else:
+                run.errors += 1
+                log.warning("карточка %s: %s", row.url, e)
         n += 1
         if n % 10 == 0:
             beat_apart(run.id, "details:%s %d/%d" % (src.name, n, len(ids)),
