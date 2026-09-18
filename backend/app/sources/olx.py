@@ -4,11 +4,23 @@
 Описание и параметры приходят сразу — карточки не нужны. Ловушки, известные
 из чужого опыта: id категорий/городов меняются (при нуле объявлений
 проверять их первыми — probe_sources.py печатает category.id и city первых
-записей), потолок offset около 1000 — выдача дробится по цене на полосы,
-где объявлений меньше 1000.
+записей), потолок выдачи 1000 — выдача дробится по цене на полосы, где
+объявлений меньше 1000.
+
+Что показал живой API 18.09.2026 (robots.txt OLX разрешает /api/v1/offers/ и
+/api/v1/friendly-links/ всем агентам):
+- клиент на Python получает 403 от CloudFront WAF — ходим через Chromium,
+  это делает fetcher (см. его докстринг), адаптеру всё равно;
+- metadata.total_elements срезан потолком (1000 при 1865 объявлениях),
+  настоящее число — metadata.visible_total_count;
+- страница — это 40 обычных объявлений плюс ~12 рекламных (promotion.top_ad),
+  одни и те же рекламные повторяются из страницы в страницу, а сдвиг
+  следующей страницы API считает сам (links.next: после offset=0 идёт 39, а
+  не 40). Поэтому offset берём из links.next, а повторы отсекаем по id.
 """
 import math
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+import re
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 from ..config import OLX_API, OLX_FRIENDLY, OLX_MAX_OFFSET, OLX_PAGE_SIZE, OLX_PATHS
 from .base import Page, RawListing, Source, parse_dt
@@ -20,6 +32,15 @@ PRICE_EDGES = {
     "rent": [0, 2000, 2400, 2800, 3200, 3600, 4000, 4500, 5500, 8000, None],
 }
 MIN_WIDTH = {"sale": 5000, "rent": 50}
+_OFFSET_RX = re.compile(r"[?&]offset=(\d+)")
+
+
+def next_offset(data: dict) -> Optional[int]:
+    """offset следующей страницы из links.next.href; None — страниц больше нет.
+    Из ссылки берём только число: адрес и фильтры остаются нашими."""
+    href = ((data.get("links") or {}).get("next") or {}).get("href") or ""
+    m = _OFFSET_RX.search(href)
+    return int(m.group(1)) if m else None
 
 
 def _pv(params: Dict[str, dict], key: str) -> Any:
@@ -85,7 +106,9 @@ class Olx(Source):
             params["filter_float_price:to"] = hi
         data = fetcher.get_json(OLX_API, params)
         meta = data.get("metadata") or {}
-        for k in ("total_elements", "total", "count"):
+        # visible_total_count первым: total_elements срезан потолком 1000, и по нему
+        # вся продажа (1865) выглядела одной полосой — собиралась бы лишь 1000
+        for k in ("visible_total_count", "total_elements", "total", "count"):
             if isinstance(meta.get(k), int):
                 return meta[k]
         return len(data.get("data") or [])
@@ -127,11 +150,16 @@ class Olx(Source):
         bands = self._bands(fetcher, base, offer_type)
         total_pages = sum(int(math.ceil(min(n, OLX_MAX_OFFSET) / float(OLX_PAGE_SIZE))) for _, _, n in bands)
         page = 0
+        # рекламные (top_ad) повторяются из страницы в страницу: без отсечения по id
+        # счётчики прогона «увидено/обновлено» завышались на ~12 за каждую страницу
+        seen: Set[str] = set()
         for lo, hi, n in bands:
             offset = 0
             while offset < min(n, OLX_MAX_OFFSET):
                 page += 1
                 if page < start_page:
+                    # возобновление после сбоя: пропущенные страницы не запрашиваем, links.next
+                    # взять неоткуда — шаг считаем сами (цена: ≤1 объявления на стыке, до следующего прогона)
                     offset += OLX_PAGE_SIZE
                     continue
                 params = dict(base, offset=offset)
@@ -145,11 +173,19 @@ class Olx(Source):
                     fetcher.dump("olx_%s_page%d.json" % (offer_type, page),
                                  _json.dumps(data, ensure_ascii=False, indent=1))
                 items = data.get("data") or []
-                parsed = [x for x in (self.parse_item(it, offer_type) for it in items) if x]
+                parsed = []
+                for it in items:
+                    x = self.parse_item(it, offer_type)
+                    if x and x.source_id not in seen:
+                        seen.add(x.source_id)
+                        parsed.append(x)
                 yield page, total_pages, parsed
-                if len(items) < OLX_PAGE_SIZE:
+                nxt = next_offset(data)
+                # нет links.next — страницы кончились; «ничего нового» и «offset не вырос» —
+                # страховка от хождения по кругу, если API начнёт отдавать next всегда
+                if not parsed or nxt is None or nxt <= offset:
                     break
-                offset += OLX_PAGE_SIZE
+                offset = nxt
 
     def parse_item(self, it: dict, offer_type: str) -> Optional[RawListing]:
         sid = it.get("id")
@@ -198,6 +234,8 @@ class Olx(Source):
             building_type_raw=_pv(params, "builttype"),
             market_raw=_pv(params, "market"),
             furnished_raw=_pv(params, "furniture"),
+            # у аренды есть «Winda: Tak/Nie» (39 из 49 в живой выдаче 18.09.2026)
+            elevator_raw=_pv(params, "winda"),
             location_names=names,
             lat=mp.get("lat"), lon=mp.get("lon"),
             seller_type_raw=seller_raw,

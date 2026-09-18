@@ -68,6 +68,16 @@ def parse_rooms(v: Any) -> Optional[int]:
 
 
 # ---------- этаж ----------
+# Выдача Otodom отдаёт этаж порядковым словом (floorNumber: "GROUND", "FIRST" ...
+# "EIGHTH" — живой ответ 18.09.2026), карточка и OLX — «floor_3».
+# Без этой таблицы этаж был пуст у всех объявлений, пока не скачана карточка
+# (а хвост — 600 карточек за прогон при ~9.5 тыс. объявлений).
+_FLOOR_WORDS = {
+    "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6,
+    "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10,
+}
+
+
 def parse_floor(v: Any) -> Optional[int]:
     """0 = parter (польская нумерация), -1 = suterena, 11 = «выше 10».
     «poddasze» (чердачный) — None: этажа как числа у него нет."""
@@ -76,13 +86,16 @@ def parse_floor(v: Any) -> Optional[int]:
     if isinstance(v, (int, float)):
         return int(v)
     k = _norm_key(v)
+    if k in _FLOOR_WORDS:
+        return _FLOOR_WORDS[k]
     if k in ("ground", "parter", "floor_0", "0", "ground_floor"):
         return 0
     if k in ("cellar", "suterena", "floor_-1", "-1", "floor__1", "basement"):
         return -1
     if k in ("garret", "poddasze", "floor_poddasze", "attic"):
         return None
-    if k in ("floor_higher_10", "floor_11", "higher_10", "powyzej_10", "11+", ">10"):
+    if k in ("floor_higher_10", "floor_11", "higher_10", "powyzej_10", "11+", ">10",
+             "above_tenth", "above_10"):
         return 11
     m = re.search(r"(-?\d+)", k)
     return int(m.group(1)) if m else None
@@ -106,6 +119,7 @@ _BUILDING = {
     "tenement": "tenement", "kamienica": "tenement",
     "apartment": "apartment", "apartamentowiec": "apartment", "apartment_building": "apartment",
     "house": "house", "dom": "house", "dom_wolnostojacy": "house", "dom_wolnostojacy_": "house",
+    "wolnostojacy": "house",          # так пишет OLX (builttype), без «dom_»
     "infill": "infill", "plomba": "infill",
     "ribbon": "ribbon", "szeregowiec": "ribbon", "dom_szeregowy": "ribbon",
     "loft": "loft",

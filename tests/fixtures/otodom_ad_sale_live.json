@@ -1,0 +1,463 @@
+{
+ "props": {
+  "pageProps": {
+   "ad": {
+    "id": 70000001,
+    "publicId": "test1",
+    "advertType": "AGENCY",
+    "advertiserType": "business",
+    "status": "active",
+    "market": "SECONDARY",
+    "source": "urn:partner:asari",
+    "title": "Do remontu Popowice Biedronka Rozkład",
+    "slug": "do-remontu-popowice-biedronka-rozklad-ID4test1",
+    "url": "https://www.otodom.pl/pl/oferta/do-remontu-popowice-biedronka-rozklad-ID4test1",
+    "description": "<strong>Słoneczne 3 pokoje 54,10 m² z wielkim potencjałem | Wrocław – Popowice, ul. Popowicka</strong><br><br>Na sprzedaż rozkładowe, 3-pokojowe mieszkanie o powierzchni <strong>54,10 mkw + 2,80 mkw piwnica</strong>, zlokalizowane na <strong>wysokim parterze</strong> w 4-piętrowym budynku na popularnych i świetnie skomunikowanych <strong>Popowicach</strong>.<br>Nieruchomość stanowi idealną …",
+    "createdAt": "2026-09-18T08:34:53Z",
+    "modifiedAt": "2026-09-18T08:35:07Z",
+    "pushedUpAt": null,
+    "characteristics": [
+     {
+      "key": "price",
+      "value": "579000",
+      "currency": "PLN",
+      "localizedValue": "579 000 zł"
+     },
+     {
+      "key": "rent",
+      "value": "450",
+      "currency": "PLN",
+      "localizedValue": "450 zł"
+     },
+     {
+      "key": "price_per_m",
+      "value": "10157.89",
+      "currency": "PLN",
+      "localizedValue": "10 157,89 zł/m²"
+     },
+     {
+      "key": "m",
+      "value": "57",
+      "localizedValue": "57 m²",
+      "currency": ""
+     },
+     {
+      "key": "market",
+      "value": "secondary",
+      "localizedValue": "",
+      "currency": ""
+     },
+     {
+      "key": "building_type",
+      "value": "block",
+      "localizedValue": "",
+      "currency": ""
+     },
+     {
+      "key": "floor_no",
+      "value": "ground_floor",
+      "localizedValue": "",
+      "currency": ""
+     },
+     {
+      "key": "construction_status",
+      "value": "to_renovation",
+      "localizedValue": "",
+      "currency": ""
+     },
+     {
+      "key": "building_material",
+      "value": "concrete_plate",
+      "localizedValue": "",
+      "currency": ""
+     },
+     {
+      "key": "windows_type",
+      "value": "wooden",
+      "localizedValue": "",
+      "currency": ""
+     },
+     {
+      "key": "building_ownership",
+      "value": "limited_ownership",
+      "localizedValue": "",
+      "currency": ""
+     },
+     {
+      "key": "remote_services",
+      "value": "1",
+      "localizedValue": "",
+      "currency": ""
+     },
+     {
+      "key": "heating",
+      "value": "urban",
+      "localizedValue": "",
+      "currency": ""
+     },
+     {
+      "key": "rooms_num",
+      "value": "3",
+      "localizedValue": "3",
+      "currency": ""
+     },
+     {
+      "key": "build_year",
+      "value": "1980",
+      "localizedValue": "1980",
+      "currency": ""
+     },
+     {
+      "key": "building_floors_num",
+      "value": "4",
+      "localizedValue": "4",
+      "currency": ""
+     }
+    ],
+    "target": {
+     "Area": "57",
+     "AreaRange": [],
+     "Build_year": "1980",
+     "Building_floors_num": "4",
+     "Building_material": [
+      "concrete_plate"
+     ],
+     "Building_ownership": [
+      "limited_ownership"
+     ],
+     "Building_type": [
+      "block"
+     ],
+     "City": "wroclaw",
+     "City_id": "39",
+     "Construction_status": [
+      "to_renovation"
+     ],
+     "Country": "Polska",
+     "Extras_types": [
+      "balcony",
+      "garage",
+      "basement",
+      "separate_kitchen"
+     ],
+     "Floor_no": [
+      "ground_floor"
+     ],
+     "Heating": [
+      "urban"
+     ],
+     "Id": "70000001",
+     "MarketType": "secondary",
+     "ObidoAdvert": "n",
+     "OfferType": "sprzedaz",
+     "Photo": "",
+     "Price": 579000,
+     "PriceRange": [
+      "500001-750000"
+     ],
+     "Price_per_m": 10157,
+     "ProperType": "mieszkanie",
+     "Province": "dolnoslaskie",
+     "RegularUser": "n",
+     "Remote_services": [
+      "1"
+     ],
+     "Rent": 450,
+     "Rooms_num": [
+      "3"
+     ],
+     "Security_types": [
+      "entryphone"
+     ],
+     "Subregion": "powiat-wroclaw",
+     "Title": "",
+     "Windows_type": [
+      "wooden"
+     ],
+     "categoryId": "101",
+     "env": "production",
+     "hidePrice": "0",
+     "seller_id": "1001",
+     "user_type": "agency"
+    },
+    "features": [],
+    "featuresByCategory": [],
+    "featuresWithoutCategory": [],
+    "additionalInformation": [
+     {
+      "label": "advertiser_type",
+      "values": [
+       "advertiser_type::agency"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "build_year",
+      "values": [
+       "1980"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "security_types",
+      "values": [
+       "security_types-101::entryphone"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "extras_types",
+      "values": [
+       "extras_types::balcony",
+       "extras_types::garage",
+       "extras_types::basement",
+       "extras_types::separate_kitchen"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "lift",
+      "values": [
+       "::n"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "building_type",
+      "values": [
+       "building_type::block"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "heating",
+      "values": [
+       "heating::urban"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "windows_type",
+      "values": [
+       "windows_type::wooden"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "building_material",
+      "values": [
+       "building_material::concrete_plate"
+      ],
+      "unit": ""
+     }
+    ],
+    "topInformation": [
+     {
+      "label": "area",
+      "values": [
+       "57"
+      ],
+      "unit": "m²"
+     },
+     {
+      "label": "construction_status",
+      "values": [
+       "construction_status::to_renovation"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "rent",
+      "values": [
+       "450 zł"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "floor",
+      "values": [
+       "floor_no::ground_floor",
+       "/4"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "rooms_num",
+      "values": [
+       "3"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "market",
+      "values": [
+       "market::secondary"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "building_ownership",
+      "values": [
+       "building_ownership::limited_ownership"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "heating",
+      "values": [
+       "heating::urban"
+      ],
+      "unit": ""
+     }
+    ],
+    "location": {
+     "id": "orn:otodompl:location:dolnoslaskie/wroclaw/wroclaw/wroclaw/fabryczna/popowice-polnocne",
+     "coordinates": {
+      "latitude": 51.128,
+      "longitude": 16.991,
+      "__typename": "Coordinates"
+     },
+     "mapDetails": {
+      "radius": 100,
+      "zoom": 12,
+      "__typename": "MapDetails"
+     },
+     "reverseGeocoding": {
+      "locations": [
+       {
+        "id": "dolnoslaskie",
+        "locationLevel": "voivodeship",
+        "name": "dolnośląskie",
+        "fullName": "dolnośląskie",
+        "fullNameItems": [
+         "dolnośląskie"
+        ],
+        "parentIds": [],
+        "__typename": "BasicLocationObject"
+       },
+       {
+        "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw",
+        "locationLevel": "city_or_village",
+        "name": "Wrocław",
+        "fullName": "Wrocław, dolnośląskie",
+        "fullNameItems": [
+         "Wrocław",
+         "dolnośląskie"
+        ],
+        "parentIds": [
+         "dolnoslaskie",
+         "dolnoslaskie/wroclaw",
+         "dolnoslaskie/wroclaw/wroclaw"
+        ],
+        "__typename": "BasicLocationObject"
+       },
+       {
+        "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw/fabryczna",
+        "locationLevel": "district",
+        "name": "Fabryczna",
+        "fullName": "Fabryczna, Wrocław, dolnośląskie",
+        "fullNameItems": [
+         "Fabryczna",
+         "Wrocław",
+         "dolnośląskie"
+        ],
+        "parentIds": [
+         "dolnoslaskie",
+         "dolnoslaskie/wroclaw",
+         "dolnoslaskie/wroclaw/wroclaw",
+         "dolnoslaskie/wroclaw/wroclaw/wroclaw"
+        ],
+        "__typename": "BasicLocationObject"
+       },
+       {
+        "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw/fabryczna/popowice-polnocne",
+        "locationLevel": "residential",
+        "name": "Popowice Północne",
+        "fullName": "Popowice Północne, Fabryczna, Wrocław, dolnośląskie",
+        "fullNameItems": [
+         "Popowice Północne",
+         "Fabryczna",
+         "Wrocław",
+         "dolnośląskie"
+        ],
+        "parentIds": [
+         "dolnoslaskie",
+         "dolnoslaskie/wroclaw",
+         "dolnoslaskie/wroclaw/wroclaw",
+         "dolnoslaskie/wroclaw/wroclaw/wroclaw",
+         "dolnoslaskie/wroclaw/wroclaw/wroclaw/fabryczna"
+        ],
+        "__typename": "BasicLocationObject"
+       }
+      ]
+     },
+     "address": {
+      "street": null,
+      "subdistrict": null,
+      "district": null,
+      "city": null,
+      "county": null,
+      "municipality": null,
+      "province": null,
+      "postalCode": null
+     }
+    },
+    "owner": {
+     "id": 1001,
+     "type": "agency",
+     "name": "Biuro Nieruchomości 1",
+     "phones": [
+      "+48600100200"
+     ],
+     "imageUrl": null,
+     "contacts": []
+    },
+    "agency": {
+     "id": 1001,
+     "name": "Biuro Nieruchomości 1",
+     "type": "agency",
+     "slug": "biuro-1-ID1001",
+     "imageUrl": null,
+     "phones": [
+      "+48600100200"
+     ],
+     "hasPhoneNumber": true,
+     "url": "/pl/firmy/biura-nieruchomosci/biuro-1"
+    },
+    "contactDetails": {
+     "name": "Jan Kowalski",
+     "type": "agency",
+     "phones": [
+      "+48600100200"
+     ],
+     "imageUrl": null,
+     "hasPhoneNumber": true
+    },
+    "images": [
+     {
+      "thumbnail": "https://example.invalid/otodom/ad1-0-thumb.jpg",
+      "small": "https://example.invalid/otodom/ad1-0-small.jpg",
+      "medium": "https://example.invalid/otodom/ad1-0-medium.jpg",
+      "large": "https://example.invalid/otodom/ad1-0-large.jpg"
+     },
+     {
+      "thumbnail": "https://example.invalid/otodom/ad1-1-thumb.jpg",
+      "small": "https://example.invalid/otodom/ad1-1-small.jpg",
+      "medium": "https://example.invalid/otodom/ad1-1-medium.jpg",
+      "large": "https://example.invalid/otodom/ad1-1-large.jpg"
+     },
+     {
+      "thumbnail": "https://example.invalid/otodom/ad1-2-thumb.jpg",
+      "small": "https://example.invalid/otodom/ad1-2-small.jpg",
+      "medium": "https://example.invalid/otodom/ad1-2-medium.jpg",
+      "large": "https://example.invalid/otodom/ad1-2-large.jpg"
+     }
+    ],
+    "property": {},
+    "price": {
+     "type": "VISIBLE"
+    }
+   }
+  }
+ }
+}

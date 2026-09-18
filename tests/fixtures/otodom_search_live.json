@@ -1,0 +1,488 @@
+{
+ "props": {
+  "pageProps": {
+   "data": {
+    "searchAds": {
+     "__typename": "FoundAds",
+     "items": [
+      {
+       "id": 70000001,
+       "title": "Do remontu Popowice Biedronka Rozkład",
+       "slug": "do-remontu-popowice-biedronka-rozklad-ID4test1",
+       "estate": "FLAT",
+       "developmentId": 0,
+       "developmentTitle": null,
+       "developmentUrl": null,
+       "transaction": "SELL",
+       "location": {
+        "mapDetails": {
+         "radius": 100,
+         "__typename": "MapDetails"
+        },
+        "address": {
+         "street": null,
+         "city": {
+          "name": "Wrocław",
+          "__typename": "City"
+         },
+         "province": {
+          "name": "dolnośląskie",
+          "__typename": "Province"
+         },
+         "__typename": "Address"
+        },
+        "reverseGeocoding": {
+         "locations": [
+          {
+           "id": "dolnoslaskie",
+           "name": "dolnośląskie",
+           "locationLevel": "voivodeship",
+           "fullName": "dolnośląskie",
+           "__typename": "BasicLocationObject"
+          },
+          {
+           "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw",
+           "name": "Wrocław",
+           "locationLevel": "city_or_village",
+           "fullName": "Wrocław, dolnośląskie",
+           "__typename": "BasicLocationObject"
+          },
+          {
+           "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw/fabryczna",
+           "name": "Fabryczna",
+           "locationLevel": "district",
+           "fullName": "Fabryczna, Wrocław, dolnośląskie",
+           "__typename": "BasicLocationObject"
+          },
+          {
+           "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw/fabryczna/popowice-polnocne",
+           "name": "Popowice Północne",
+           "locationLevel": "residential",
+           "fullName": "Popowice Północne, Fabryczna, Wrocław, dolnośląskie",
+           "__typename": "BasicLocationObject"
+          }
+         ],
+         "__typename": "ReverseGeocoding"
+        },
+        "__typename": "LocationDetails"
+       },
+       "images": [
+        {
+         "medium": "https://example.invalid/otodom/1-0-medium.jpg",
+         "large": "https://example.invalid/otodom/1-0-large.jpg",
+         "__typename": "AdvertListItemImage"
+        },
+        {
+         "medium": "https://example.invalid/otodom/1-1-medium.jpg",
+         "large": "https://example.invalid/otodom/1-1-large.jpg",
+         "__typename": "AdvertListItemImage"
+        }
+       ],
+       "totalPossibleImages": 6,
+       "isExclusiveOffer": false,
+       "isPrivateOwner": false,
+       "isPromoted": false,
+       "extendedAdvertiserType": null,
+       "source": "urn:partner:asari",
+       "agency": {
+        "id": 1001,
+        "name": "Biuro Nieruchomości 1",
+        "type": "AGENCY",
+        "slug": "biuro-1-ID1001",
+        "imageUrl": null,
+        "brandingVisible": true,
+        "highlightedAds": false,
+        "__typename": "AgencyListingDetails"
+       },
+       "openDays": null,
+       "totalPrice": {
+        "value": 579000,
+        "currency": "PLN",
+        "__typename": "Money"
+       },
+       "rentPrice": {
+        "value": 450,
+        "currency": "PLN",
+        "__typename": "Money"
+       },
+       "priceFromPerSquareMeter": null,
+       "pricePerSquareMeter": {
+        "value": 10157.89,
+        "currency": "PLN",
+        "__typename": "Money"
+       },
+       "areaInSquareMeters": 57,
+       "terrainAreaInSquareMeters": null,
+       "roomsNumber": "THREE",
+       "hidePrice": false,
+       "floorNumber": "GROUND",
+       "investmentState": null,
+       "investmentUnitsAreaInSquareMeters": null,
+       "peoplePerRoom": null,
+       "dateCreated": "2026-09-18 10:35:07",
+       "createdAtFirst": "2026-09-18T10:34:53Z",
+       "investmentUnitsNumber": null,
+       "investmentUnitsRoomsNumber": null,
+       "investmentUnitsFloorsRange": null,
+       "investmentEstimatedDelivery": null,
+       "pushedUpAt": null,
+       "specialOffer": null,
+       "shortDescription": "(skrócony opis z wyników — adapter go nie czyta, w fiksturze pominięty)",
+       "organisationAssignedMember": {
+        "profileID": "1",
+        "userID": "2001",
+        "firstName": "Jan",
+        "lastName": "Kowalski",
+        "photoURL": null,
+        "mobile": "+48600100200",
+        "__typename": "OrganisationAssignedMember"
+       },
+       "advertOwner": {
+        "name": "Doradca",
+        "imageUrl": null,
+        "__typename": "LegacyAdvertOwner"
+       },
+       "tags": [
+        {
+         "value": "SEPARATE_KITCHEN",
+         "weight": 50,
+         "__typename": "AdvertListItemTag"
+        },
+        {
+         "value": "BALCONY",
+         "weight": 35,
+         "__typename": "AdvertListItemTag"
+        },
+        {
+         "value": "BASEMENT",
+         "weight": 25,
+         "__typename": "AdvertListItemTag"
+        },
+        {
+         "value": "PARKING_SPOT",
+         "weight": 15,
+         "__typename": "AdvertListItemTag"
+        },
+        {
+         "value": "GROUND_FLOOR",
+         "weight": 5,
+         "__typename": "AdvertListItemTag"
+        }
+       ],
+       "__typename": "AdvertListItem",
+       "showPremiumTile": false,
+       "development": null,
+       "href": "[lang]/ad/do-remontu-popowice-biedronka-rozklad-ID4test1"
+      },
+      {
+       "id": 70000002,
+       "title": "Przytulne 2-pokojowe mieszkanie na Bulwarze Dedala",
+       "slug": "przytulne-2-pokojowe-mieszkanie-na-bulwarze-dedala-ID4test2",
+       "estate": "FLAT",
+       "developmentId": 0,
+       "developmentTitle": null,
+       "developmentUrl": null,
+       "transaction": "SELL",
+       "location": {
+        "mapDetails": {
+         "radius": 0,
+         "__typename": "MapDetails"
+        },
+        "address": {
+         "street": {
+          "name": "bulw. Dedala",
+          "number": "",
+          "__typename": "Street"
+         },
+         "city": {
+          "name": "Wrocław",
+          "__typename": "City"
+         },
+         "province": {
+          "name": "dolnośląskie",
+          "__typename": "Province"
+         },
+         "__typename": "Address"
+        },
+        "reverseGeocoding": {
+         "locations": [
+          {
+           "id": "dolnoslaskie",
+           "name": "dolnośląskie",
+           "locationLevel": "voivodeship",
+           "fullName": "dolnośląskie",
+           "__typename": "BasicLocationObject"
+          },
+          {
+           "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw",
+           "name": "Wrocław",
+           "locationLevel": "city_or_village",
+           "fullName": "Wrocław, dolnośląskie",
+           "__typename": "BasicLocationObject"
+          },
+          {
+           "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw/fabryczna",
+           "name": "Fabryczna",
+           "locationLevel": "district",
+           "fullName": "Fabryczna, Wrocław, dolnośląskie",
+           "__typename": "BasicLocationObject"
+          },
+          {
+           "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw/fabryczna/gadow",
+           "name": "Gądów",
+           "locationLevel": "residential",
+           "fullName": "Gądów, Fabryczna, Wrocław, dolnośląskie",
+           "__typename": "BasicLocationObject"
+          }
+         ],
+         "__typename": "ReverseGeocoding"
+        },
+        "__typename": "LocationDetails"
+       },
+       "images": [
+        {
+         "medium": "https://example.invalid/otodom/2-0-medium.jpg",
+         "large": "https://example.invalid/otodom/2-0-large.jpg",
+         "__typename": "AdvertListItemImage"
+        },
+        {
+         "medium": "https://example.invalid/otodom/2-1-medium.jpg",
+         "large": "https://example.invalid/otodom/2-1-large.jpg",
+         "__typename": "AdvertListItemImage"
+        }
+       ],
+       "totalPossibleImages": 6,
+       "isExclusiveOffer": false,
+       "isPrivateOwner": true,
+       "isPromoted": true,
+       "extendedAdvertiserType": "private_person",
+       "source": "urn:site:local",
+       "agency": null,
+       "openDays": null,
+       "totalPrice": {
+        "value": 680000,
+        "currency": "PLN",
+        "__typename": "Money"
+       },
+       "rentPrice": {
+        "value": 650,
+        "currency": "PLN",
+        "__typename": "Money"
+       },
+       "priceFromPerSquareMeter": null,
+       "pricePerSquareMeter": {
+        "value": 15111.11,
+        "currency": "PLN",
+        "__typename": "Money"
+       },
+       "areaInSquareMeters": 45,
+       "terrainAreaInSquareMeters": null,
+       "roomsNumber": "TWO",
+       "hidePrice": false,
+       "floorNumber": "SIXTH",
+       "investmentState": null,
+       "investmentUnitsAreaInSquareMeters": null,
+       "peoplePerRoom": null,
+       "dateCreated": "2026-09-18 10:01:04",
+       "createdAtFirst": "2026-09-18T09:57:18Z",
+       "investmentUnitsNumber": null,
+       "investmentUnitsRoomsNumber": null,
+       "investmentUnitsFloorsRange": null,
+       "investmentEstimatedDelivery": null,
+       "pushedUpAt": null,
+       "specialOffer": null,
+       "shortDescription": "(skrócony opis z wyników — adapter go nie czyta, w fiksturze pominięty)",
+       "organisationAssignedMember": null,
+       "advertOwner": {
+        "name": "Doradca",
+        "imageUrl": null,
+        "__typename": "LegacyAdvertOwner"
+       },
+       "tags": [
+        {
+         "value": "AIR_CONDITIONING",
+         "weight": 55,
+         "__typename": "AdvertListItemTag"
+        },
+        {
+         "value": "TERRACE",
+         "weight": 40,
+         "__typename": "AdvertListItemTag"
+        },
+        {
+         "value": "BALCONY",
+         "weight": 35,
+         "__typename": "AdvertListItemTag"
+        },
+        {
+         "value": "BASEMENT",
+         "weight": 25,
+         "__typename": "AdvertListItemTag"
+        },
+        {
+         "value": "PARKING_SPOT",
+         "weight": 15,
+         "__typename": "AdvertListItemTag"
+        },
+        {
+         "value": "SECURE_BUILDING",
+         "weight": 10,
+         "__typename": "AdvertListItemTag"
+        }
+       ],
+       "__typename": "AdvertListItem",
+       "showPremiumTile": false,
+       "development": null,
+       "href": "[lang]/ad/przytulne-2-pokojowe-mieszkanie-na-bulwarze-dedala-ID4test2"
+      },
+      {
+       "id": 70000003,
+       "title": "Grabiszyńska+ | Apartamenty | Lokale usługowe | Wrocław",
+       "slug": "grabiszynska-apartamenty-lokale-uslugowe-wroclaw-ID4test3",
+       "estate": "INVESTMENT",
+       "developmentId": 0,
+       "developmentTitle": null,
+       "developmentUrl": null,
+       "transaction": "SELL",
+       "location": {
+        "mapDetails": {
+         "radius": 0,
+         "__typename": "MapDetails"
+        },
+        "address": {
+         "street": {
+          "name": "al. gen. Józefa Hallera",
+          "number": "",
+          "__typename": "Street"
+         },
+         "city": {
+          "name": "Wrocław",
+          "__typename": "City"
+         },
+         "province": {
+          "name": "dolnośląskie",
+          "__typename": "Province"
+         },
+         "__typename": "Address"
+        },
+        "reverseGeocoding": {
+         "locations": [
+          {
+           "id": "dolnoslaskie",
+           "fullName": "dolnośląskie",
+           "name": "dolnośląskie",
+           "locationLevel": "voivodeship",
+           "__typename": "BasicLocationObject"
+          },
+          {
+           "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw",
+           "fullName": "Wrocław, dolnośląskie",
+           "name": "Wrocław",
+           "locationLevel": "city_or_village",
+           "__typename": "BasicLocationObject"
+          },
+          {
+           "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw/fabryczna",
+           "fullName": "Fabryczna, Wrocław, dolnośląskie",
+           "name": "Fabryczna",
+           "locationLevel": "district",
+           "__typename": "BasicLocationObject"
+          },
+          {
+           "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw/fabryczna/grabiszyn",
+           "fullName": "Grabiszyn, Fabryczna, Wrocław, dolnośląskie",
+           "name": "Grabiszyn",
+           "locationLevel": "residential",
+           "__typename": "BasicLocationObject"
+          }
+         ],
+         "__typename": "ReverseGeocoding"
+        },
+        "__typename": "LocationDetails"
+       },
+       "images": [
+        {
+         "medium": "https://example.invalid/otodom/3-0-medium.jpg",
+         "large": "https://example.invalid/otodom/3-0-large.jpg",
+         "__typename": "AdvertListItemImage"
+        },
+        {
+         "medium": "https://example.invalid/otodom/3-1-medium.jpg",
+         "large": "https://example.invalid/otodom/3-1-large.jpg",
+         "__typename": "AdvertListItemImage"
+        }
+       ],
+       "totalPossibleImages": 5,
+       "isExclusiveOffer": false,
+       "isPrivateOwner": false,
+       "isPromoted": false,
+       "agency": {
+        "id": 1003,
+        "name": "Biuro Nieruchomości 3",
+        "type": "DEVELOPER",
+        "slug": "biuro-3-ID1003",
+        "imageUrl": null,
+        "brandingVisible": false,
+        "highlightedAds": false,
+        "__typename": "AgencyListingDetails"
+       },
+       "openDays": null,
+       "totalPrice": null,
+       "rentPrice": null,
+       "priceFromPerSquareMeter": {
+        "value": 11100,
+        "currency": "PLN",
+        "__typename": "Money"
+       },
+       "pricePerSquareMeter": null,
+       "areaInSquareMeters": null,
+       "terrainAreaInSquareMeters": null,
+       "roomsNumber": null,
+       "hidePrice": false,
+       "floorNumber": null,
+       "investmentState": "READY",
+       "investmentUnitsAreaInSquareMeters": {
+        "from": 49,
+        "to": 215,
+        "__typename": "InvestmentUnitsArea"
+       },
+       "peoplePerRoom": null,
+       "dateCreated": "2026-05-26 15:49:33",
+       "createdAtFirst": "2026-02-24T20:13:47Z",
+       "investmentUnitsNumber": 10,
+       "investmentUnitsFloorsRange": {
+        "min": "SECOND",
+        "max": "EIGHTH",
+        "__typename": "InvestmentUnitsFloorsRange"
+       },
+       "investmentUnitsRoomsNumber": {
+        "min": "THREE",
+        "max": "FIVE",
+        "__typename": "InvestmentUnitsRoomsNumber"
+       },
+       "investmentEstimatedDelivery": {
+        "quarter": 3,
+        "year": 2025,
+        "__typename": "InvestmentEstimatedDelivery"
+       },
+       "pushedUpAt": "2026-05-26T15:49:33+02:00",
+       "specialOffer": null,
+       "shortDescription": "(skrócony opis z wyników — adapter go nie czyta, w fiksturze pominięty)",
+       "tags": [],
+       "__typename": "AdvertListItem",
+       "relatedAds": null,
+       "href": "[lang]/ad/grabiszynska-apartamenty-lokale-uslugowe-wroclaw-ID4test3"
+      }
+     ],
+     "pagination": {
+      "totalItems": 9467,
+      "totalPages": 132,
+      "currentPage": 1,
+      "itemsPerPage": 72,
+      "__typename": "SearchPagination"
+     }
+    }
+   }
+  }
+ }
+}

@@ -1,0 +1,537 @@
+{
+ "data": [
+  {
+   "id": 910000001,
+   "url": "https://www.olx.pl/d/oferta/kawalerka-17-m-parter-niezalezne-wejscie-wroclaw-gaj-CID3-IDtest1.html",
+   "title": "Kawalerka 17 m² | parter | niezależne wejście | Wrocław Gaj",
+   "last_refresh_time": "2026-09-16T15:39:10+02:00",
+   "created_time": "2026-04-08T21:02:30+02:00",
+   "valid_to_time": "2026-10-18T15:39:05+02:00",
+   "pushup_time": "2026-09-16T15:39:10+02:00",
+   "description": "--- Nie jestem zainteresowany ofertami firm pośredniczących ---<br />\n<br />\nNa sprzedaż kompaktowa i funkcjonalna kawalerka o powierzchni 17,1 m², położona na parterze budynku z 2000 roku we Wrocław, przy ul. Orłowicza (osiedle Gaj).<br />\n<br />\nNajważniejsze atuty:<br />\n<br />\nniezależne wejście – większa prywatność i wygoda<br />\nparter – brak schodów, łatwy dostęp<br />\nniski czynsz – ok. …",
+   "promotion": {
+    "highlighted": false,
+    "urgent": false,
+    "top_ad": false,
+    "options": [],
+    "b2c_ad_page": false,
+    "premium_ad_page": false
+   },
+   "params": [
+    {
+     "key": "price_per_m",
+     "name": "Cena za m²",
+     "type": "input",
+     "value": {
+      "key": "15070.18",
+      "label": "15070.18 zł/m²"
+     }
+    },
+    {
+     "key": "floor_select",
+     "name": "Poziom",
+     "type": "select",
+     "value": {
+      "key": "floor_0",
+      "label": "Parter"
+     }
+    },
+    {
+     "key": "furniture",
+     "name": "Umeblowane",
+     "type": "select",
+     "value": {
+      "key": "yes",
+      "label": "Tak"
+     }
+    },
+    {
+     "key": "market",
+     "name": "Rynek",
+     "type": "select",
+     "value": {
+      "key": "secondary",
+      "label": "Wtórny"
+     }
+    },
+    {
+     "key": "price",
+     "name": "Cena",
+     "type": "price",
+     "value": {
+      "value": 257700,
+      "type": "price",
+      "arranged": false,
+      "budget": false,
+      "currency": "PLN",
+      "negotiable": false,
+      "converted_value": null,
+      "previous_value": null,
+      "converted_previous_value": null,
+      "converted_currency": null,
+      "label": "257 700 zł",
+      "previous_label": null
+     }
+    },
+    {
+     "key": "builttype",
+     "name": "Rodzaj zabudowy",
+     "type": "select",
+     "value": {
+      "key": "blok",
+      "label": "Blok"
+     }
+    },
+    {
+     "key": "m",
+     "name": "Powierzchnia",
+     "type": "input",
+     "value": {
+      "key": "17.1",
+      "label": "17,10 m²"
+     }
+    },
+    {
+     "key": "rooms",
+     "name": "Liczba pokoi",
+     "type": "select",
+     "value": {
+      "key": "one",
+      "label": "1 pokój"
+     }
+    }
+   ],
+   "key_params": [
+    "price_per_m",
+    "m"
+   ],
+   "business": false,
+   "user": {
+    "id": 5001,
+    "name": "Użytkownik 1",
+    "created": "2014-08-14T20:51:00+02:00",
+    "other_ads_enabled": true,
+    "logo": null,
+    "photo": null,
+    "company_name": "",
+    "seller_type": null
+   },
+   "status": "active",
+   "contact": {
+    "name": "Użytkownik 1",
+    "phone": true,
+    "chat": true,
+    "negotiation": false,
+    "courier": false
+   },
+   "map": {
+    "zoom": 13,
+    "lat": 51.076,
+    "lon": 17.035,
+    "radius": 3,
+    "show_detailed": false
+   },
+   "location": {
+    "city": {
+     "id": 19701,
+     "name": "Wrocław",
+     "normalized_name": "wroclaw"
+    },
+    "district": {
+     "id": 391,
+     "name": "Krzyki"
+    },
+    "region": {
+     "id": 3,
+     "name": "Dolnośląskie",
+     "normalized_name": "dolnoslaskie"
+    }
+   },
+   "photos": [
+    {
+     "id": 8010,
+     "filename": "test1-0",
+     "rotation": 0,
+     "width": 4096,
+     "height": 3072,
+     "link": "https://example.invalid/olx/test1-0/image;s={width}x{height}"
+    },
+    {
+     "id": 8011,
+     "filename": "test1-1",
+     "rotation": 0,
+     "width": 4096,
+     "height": 3072,
+     "link": "https://example.invalid/olx/test1-1/image;s={width}x{height}"
+    }
+   ],
+   "partner": null,
+   "category": {
+    "id": 14,
+    "type": "real_estate"
+   },
+   "offer_type": "offer",
+   "protect_phone": false
+  },
+  {
+   "id": 910000002,
+   "url": "https://www.olx.pl/d/oferta/winda-klimatyzacja-recepcja-pwr-bez-vat-CID3-IDtest2.html",
+   "title": "Winda | Klimatyzacja | Recepcja | Pwr | Bez Vat",
+   "last_refresh_time": "2026-09-17T12:27:14+02:00",
+   "created_time": "2026-09-17T12:33:48+02:00",
+   "valid_to_time": "2026-10-17T12:33:42+02:00",
+   "pushup_time": null,
+   "description": "<strong>Lokal Niemieszkalny | Starter 1 | ul. Pasteura 18 | 13,04 m² </strong><br />\n<br />\nNa sprzedaż lokal niemieszkalny o powierzchni 13,04 m², położony w nowoczesnym budynku Starter 1 przy ul. Pasteura 18 we Wrocławiu.<br />\n<br />\n<strong>Lokalizacja:</strong><br />\n<br />\nLokal znajduje się w jednej z najbardziej rozpoznawalnych inwestycji w okolicy kampusu Politechniki Wrocławskiej. …",
+   "promotion": {
+    "highlighted": false,
+    "urgent": false,
+    "top_ad": false,
+    "options": [],
+    "b2c_ad_page": false,
+    "premium_ad_page": false
+   },
+   "params": [
+    {
+     "key": "price_per_m",
+     "name": "Cena za m²",
+     "type": "input",
+     "value": {
+      "key": "18788.34",
+      "label": "18788.34 zł/m²"
+     }
+    },
+    {
+     "key": "floor_select",
+     "name": "Poziom",
+     "type": "select",
+     "value": {
+      "key": "floor_4",
+      "label": "4"
+     }
+    },
+    {
+     "key": "furniture",
+     "name": "Umeblowane",
+     "type": "select",
+     "value": {
+      "key": "no",
+      "label": "Nie"
+     }
+    },
+    {
+     "key": "market",
+     "name": "Rynek",
+     "type": "select",
+     "value": {
+      "key": "secondary",
+      "label": "Wtórny"
+     }
+    },
+    {
+     "key": "price",
+     "name": "Cena",
+     "type": "price",
+     "value": {
+      "value": 245000,
+      "type": "price",
+      "arranged": false,
+      "budget": false,
+      "currency": "PLN",
+      "negotiable": false,
+      "converted_value": null,
+      "previous_value": null,
+      "converted_previous_value": null,
+      "converted_currency": null,
+      "label": "245 000 zł",
+      "previous_label": null
+     }
+    },
+    {
+     "key": "builttype",
+     "name": "Rodzaj zabudowy",
+     "type": "select",
+     "value": {
+      "key": "pozostale",
+      "label": "Pozostałe"
+     }
+    },
+    {
+     "key": "m",
+     "name": "Powierzchnia",
+     "type": "input",
+     "value": {
+      "key": "13.04",
+      "label": "13,04 m²"
+     }
+    },
+    {
+     "key": "rooms",
+     "name": "Liczba pokoi",
+     "type": "select",
+     "value": {
+      "key": "one",
+      "label": "1 pokój"
+     }
+    }
+   ],
+   "key_params": [
+    "price_per_m",
+    "m"
+   ],
+   "business": true,
+   "user": {
+    "id": 5002,
+    "name": "Użytkownik 2",
+    "created": "2014-05-23T01:05:01+02:00",
+    "other_ads_enabled": true,
+    "logo": null,
+    "photo": null,
+    "company_name": "",
+    "seller_type": null
+   },
+   "status": "active",
+   "contact": {
+    "name": "Użytkownik 2",
+    "phone": true,
+    "chat": true,
+    "negotiation": false,
+    "courier": false
+   },
+   "map": {
+    "zoom": 12,
+    "lat": 51.114,
+    "lon": 17.07,
+    "radius": 0,
+    "show_detailed": true
+   },
+   "location": {
+    "city": {
+     "id": 19701,
+     "name": "Wrocław",
+     "normalized_name": "wroclaw"
+    },
+    "district": {
+     "id": 387,
+     "name": "Śródmieście"
+    },
+    "region": {
+     "id": 3,
+     "name": "Dolnośląskie",
+     "normalized_name": "dolnoslaskie"
+    }
+   },
+   "photos": [
+    {
+     "id": 8020,
+     "filename": "test2-0",
+     "rotation": 0,
+     "width": 1200,
+     "height": 900,
+     "link": "https://example.invalid/olx/test2-0/image;s={width}x{height}"
+    },
+    {
+     "id": 8021,
+     "filename": "test2-1",
+     "rotation": 0,
+     "width": 1200,
+     "height": 900,
+     "link": "https://example.invalid/olx/test2-1/image;s={width}x{height}"
+    }
+   ],
+   "partner": {
+    "code": "otodom_pl"
+   },
+   "category": {
+    "id": 14,
+    "type": "real_estate"
+   },
+   "offer_type": "offer",
+   "external_url": "https://www.otodom.pl/pl/oferta/winda-klimatyzacja-recepcja-pwr-bez-vat-ID4test902",
+   "protect_phone": true
+  },
+  {
+   "id": 910000003,
+   "url": "https://www.olx.pl/d/oferta/mikrokawalerka-w-srodmiesciu-starter-1-plac-grunwaldzki-bezposrednio-CID3-IDtest3.html",
+   "title": "Mikrokawalerka w Śródmieściu STARTER 1 Plac Grunwaldzki BEZPOŚREDNIO",
+   "last_refresh_time": "2026-09-17T09:17:41+02:00",
+   "created_time": "2026-07-19T09:19:49+02:00",
+   "valid_to_time": "2026-10-17T09:19:43+02:00",
+   "pushup_time": null,
+   "description": "<p>Oferuję na sprzedaż przytulną mikrokawalerkę w budynku STARTER I przy wyb. Ludwika Pasteura 18, tuż obok wielu wrocławskich uczelni i placu Grunwaldzkiego. Położona na 9 piętrze z pięknym widokiem na miasto, w pełni wyposażona z meblami (m.in. łóżko składane do szafy), lodówką i kuchenką. Odmalowana i wyczyszczona - gotowa do wprowadzenia.</p><p>To lokal niemieszkalny o pow. 13,87 m², idealny …",
+   "promotion": {
+    "highlighted": false,
+    "urgent": false,
+    "top_ad": false,
+    "options": [],
+    "b2c_ad_page": false,
+    "premium_ad_page": false
+   },
+   "params": [
+    {
+     "key": "price_per_m",
+     "name": "Cena za m²",
+     "type": "input",
+     "value": {
+      "key": "20187.45",
+      "label": "20187.45 zł/m²"
+     }
+    },
+    {
+     "key": "floor_select",
+     "name": "Poziom",
+     "type": "select",
+     "value": {
+      "key": "floor_9",
+      "label": "9"
+     }
+    },
+    {
+     "key": "furniture",
+     "name": "Umeblowane",
+     "type": "select",
+     "value": {
+      "key": "yes",
+      "label": "Tak"
+     }
+    },
+    {
+     "key": "market",
+     "name": "Rynek",
+     "type": "select",
+     "value": {
+      "key": "secondary",
+      "label": "Wtórny"
+     }
+    },
+    {
+     "key": "price",
+     "name": "Cena",
+     "type": "price",
+     "value": {
+      "value": 280000,
+      "type": "price",
+      "arranged": false,
+      "budget": false,
+      "currency": "PLN",
+      "negotiable": false,
+      "converted_value": null,
+      "previous_value": null,
+      "converted_previous_value": null,
+      "converted_currency": null,
+      "label": "280 000 zł",
+      "previous_label": null
+     }
+    },
+    {
+     "key": "builttype",
+     "name": "Rodzaj zabudowy",
+     "type": "select",
+     "value": {
+      "key": "apartamentowiec",
+      "label": "Apartamentowiec"
+     }
+    },
+    {
+     "key": "m",
+     "name": "Powierzchnia",
+     "type": "input",
+     "value": {
+      "key": "13.87",
+      "label": "13,87 m²"
+     }
+    },
+    {
+     "key": "rooms",
+     "name": "Liczba pokoi",
+     "type": "select",
+     "value": {
+      "key": "one",
+      "label": "1 pokój"
+     }
+    }
+   ],
+   "key_params": [
+    "price_per_m",
+    "m"
+   ],
+   "business": false,
+   "user": {
+    "id": 5003,
+    "name": "Użytkownik 3",
+    "created": "2014-05-23T01:05:01+02:00",
+    "other_ads_enabled": true,
+    "logo": null,
+    "photo": null,
+    "company_name": "",
+    "seller_type": null
+   },
+   "status": "active",
+   "contact": {
+    "name": "Użytkownik 3",
+    "phone": true,
+    "chat": true,
+    "negotiation": false,
+    "courier": false
+   },
+   "map": {
+    "zoom": 18,
+    "lat": 51.114,
+    "lon": 17.071,
+    "radius": 0,
+    "show_detailed": true
+   },
+   "location": {
+    "city": {
+     "id": 19701,
+     "name": "Wrocław",
+     "normalized_name": "wroclaw"
+    },
+    "region": {
+     "id": 3,
+     "name": "Dolnośląskie",
+     "normalized_name": "dolnoslaskie"
+    }
+   },
+   "photos": [
+    {
+     "id": 8030,
+     "filename": "test3-0",
+     "rotation": 0,
+     "width": 768,
+     "height": 1024,
+     "link": "https://example.invalid/olx/test3-0/image;s={width}x{height}"
+    },
+    {
+     "id": 8031,
+     "filename": "test3-1",
+     "rotation": 0,
+     "width": 768,
+     "height": 1024,
+     "link": "https://example.invalid/olx/test3-1/image;s={width}x{height}"
+    }
+   ],
+   "partner": {
+    "code": "otodom_pl"
+   },
+   "category": {
+    "id": 14,
+    "type": "real_estate"
+   },
+   "offer_type": "offer",
+   "external_url": "https://www.otodom.pl/pl/oferta/mikrokawalerka-w-srodmiesciu-starter-1-plac-grunwaldzki-bezposrednio-ID4test903"
+  }
+ ],
+ "metadata": {
+  "total_elements": 13,
+  "visible_total_count": 13,
+  "promoted": []
+ },
+ "links": {
+  "self": {
+   "href": "https://www.olx.pl/api/v1/offers?category_id=14&city_id=19701&sort_by=created_at%3Adesc&limit=40&offset=0&filter_float_price%3Afrom=0&filter_float_price%3Ato=299999"
+  },
+  "first": {
+   "href": "https://www.olx.pl/api/v1/offers?category_id=14&city_id=19701&sort_by=created_at%3Adesc&limit=40&offset=0&filter_float_price%3Afrom=0&filter_float_price%3Ato=299999"
+  }
+ }
+}

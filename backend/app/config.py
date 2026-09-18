@@ -48,12 +48,18 @@ OTODOM_AD_URL = "https://www.otodom.pl/pl/oferta/{slug}"
 # ссылке (friendly-links) и лишь при неудаче берёт настройку.
 OLX_API = "https://www.olx.pl/api/v1/offers/"
 OLX_FRIENDLY = "https://www.olx.pl/api/v1/friendly-links/query-params/"
+# Части пути — через ЗАПЯТУЮ. Проверено на живом API 18.09.2026: через слэш
+# («a/b/c/» и «a/b/c») -> 404 «unknown method or incorrect parameters»,
+# через запятую («a,b,c/») -> 200 {"data": {"category_id": 14, "city_id": 19701}}.
 OLX_PATHS = {
-    "sale": "nieruchomosci/mieszkania/sprzedaz/wroclaw/",
-    "rent": "nieruchomosci/mieszkania/wynajem/wroclaw/",
+    "sale": "nieruchomosci,mieszkania,sprzedaz,wroclaw/",
+    "rent": "nieruchomosci,mieszkania,wynajem,wroclaw/",
 }
-OLX_PAGE_SIZE = 40      # больше API не отдаёт
-OLX_MAX_OFFSET = 1000   # дальше API отвечает ошибкой — выдачу дробим по цене
+OLX_PAGE_SIZE = 40      # обычных объявлений на страницу; сверху API докладывает ~12 рекламных
+# Потолок выдачи: metadata.total_elements никогда не больше 1000, сколько бы
+# объявлений ни было (настоящее число — visible_total_count). Выдачу дробим
+# по цене на полосы, где объявлений меньше потолка.
+OLX_MAX_OFFSET = 1000
 
 # ---------- темп и жизнь ----------
 # ≤15 запросов в минуту — тот же потолок, что уберёг киевскую систему от

@@ -12,12 +12,35 @@
 """
 import json
 import re
+from datetime import datetime, timezone
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from ..config import OTODOM_AD_URL, OTODOM_PAGE_SIZE, OTODOM_SEARCH
+from ..tz import WARSAW
 from .base import Page, RawListing, Source, parse_dt
 
 NEXT_RX = re.compile(r'<script[^>]+id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.S)
+
+
+def parse_local_dt(v: Any) -> Optional[datetime]:
+    """Время из ВЫДАЧИ Otodom -> наивный UTC. Выдача пишет польское местное
+    время, даже когда ставит «Z»: у одного объявления 18.09.2026 в выдаче
+    createdAtFirst="2026-09-18T10:21:14Z" и dateCreated="2026-09-18 10:22:05",
+    а в карточке createdAt="2026-09-18T08:21:14Z" и modifiedAt="...T08:22:05Z"
+    (карточка — честный UTC, объявлению в тот момент было 2 минуты). Читая
+    выдачу как UTC, получали подачу «из будущего» на 1-2 часа, и значение
+    прыгало между выдачей и карточкой на каждом прогоне.
+    Явное смещение («+02:00») — верим ему."""
+    if not v:
+        return None
+    s = str(v).strip()
+    if re.search(r"[+-]\d{2}:?\d{2}$", s):
+        return parse_dt(s)
+    try:
+        wall = datetime.strptime(s[:19].replace("T", " "), "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return parse_dt(s)
+    return wall.replace(tzinfo=WARSAW).astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def extract_next_data(html: str) -> dict:
@@ -167,6 +190,13 @@ class Otodom(Source):
         sid = it.get("id")
         if sid is None:
             return None
+        # estate="INVESTMENT" — инвестиция целиком (живой ответ 18.09.2026: цена, площадь,
+        # комнаты и этаж = null, есть только priceFromPerSquareMeter и диапазоны). Её
+        # квартиры идут в той же выдаче отдельными FLAT с developmentId; сама инвестиция —
+        # отдельная сущность (DEFERRED §5), в каталоге квартир она была бы пустой строкой
+        # и зря тратила бы карточку в хвосте.
+        if (it.get("estate") or "FLAT") != "FLAT":
+            return None
         slug = it.get("slug") or ""
         # без slug адрес не построить: код в URL не выводится из числового id
         url = OTODOM_AD_URL.format(slug=slug) if slug else (it.get("url") or u"")
@@ -187,8 +217,10 @@ class Otodom(Source):
             price=_val(total),
             currency=(total.get("currency") if isinstance(total, dict) else None) or "PLN",
             price_per_m2=_val(it.get("pricePerSquareMeter")),
-            # у аренды rentPrice — это czynsz «dodatkowo», у продажи его нет
-            czynsz=_val(it.get("rentPrice")) if offer_type == "rent" else None,
+            # у аренды rentPrice — это czynsz «dodatkowo», у продажи его нет. 0 = поле не
+            # заполнено (в живой выдаче аренды: null — 16 из 73, value=0 — 4): «0 zł» в
+            # карточке читалось бы как «платежей нет», а это неизвестно
+            czynsz=(_val(it.get("rentPrice")) or None) if offer_type == "rent" else None,
             hide_price=bool(it.get("hidePrice")),
             area=_val(it.get("areaInSquareMeters")),
             rooms_raw=it.get("roomsNumber"),
@@ -200,8 +232,10 @@ class Otodom(Source):
             seller_id=("agency:%s" % agency.get("id")) if isinstance(agency, dict) and agency.get("id") else None,
             images=images,
             image_count=it.get("totalPossibleImages"),
-            posted_at=parse_dt(it.get("dateCreatedFirst") or it.get("dateCreated")),
-            refreshed_at=parse_dt(it.get("pushedUpAt") or it.get("dateCreated")),
+            # живой ключ — createdAtFirst; dateCreatedFirst оставлен на случай отката имени
+            posted_at=parse_local_dt(it.get("createdAtFirst") or it.get("dateCreatedFirst")
+                                     or it.get("dateCreated")),
+            refreshed_at=parse_local_dt(it.get("pushedUpAt") or it.get("dateCreated")),
             raw=it, needs_details=True,
         )
         if it.get("shortDescription") and not r.description:
@@ -253,7 +287,7 @@ class Otodom(Source):
         raw.elevator_raw = cv("lift", "Lift")
         raw.furnished_raw = cv("furniture", "Furniture")
         rent = _val(cv("rent", "Rent"))
-        if rent is not None:
+        if rent:                       # 0 — «не заполнено», см. parse_item
             raw.czynsz = rent
         raw.extras = _listify(cv("extras_types", "Extras_types")) + _listify(cv("equipment_types", "Equipment_types"))
         raw.media = _listify(cv("media_types", "Media_types"))

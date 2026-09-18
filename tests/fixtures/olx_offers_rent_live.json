@@ -1,0 +1,415 @@
+{
+ "data": [
+  {
+   "id": 910000001,
+   "url": "https://www.olx.pl/d/oferta/pokoje-do-wynajecia-wroclaw-mieszkanie-po-remoncie-CID3-IDtest1.html",
+   "title": "Pokoje do wynajecia wroclaw. Mieszkanie po remoncie",
+   "last_refresh_time": "2026-09-01T21:12:20+02:00",
+   "created_time": "2026-09-01T21:09:12+02:00",
+   "valid_to_time": "2026-10-01T21:09:12+02:00",
+   "pushup_time": null,
+   "description": "POKOJE DO WYNAJĘCIA – WROCŁAW, UL. SIENKIEWICZA | PLAC GRUNWALDZKI<br />\nDwa pokoje do wynajęcia w przestronnym, jasnym mieszkaniu o powierzchni 77 m² w pięknej kamienicy przy ul. Sienkiewicza.<br />\n<br />\nŚwietna lokalizacja – blisko Placu Grunwaldzkiego, wrocławskich uczelni oraz komunikacji miejskiej. To doskonałe miejsce dla studentów i młodych osób pracujących, którzy chcą mieszkać blisko …",
+   "promotion": {
+    "highlighted": true,
+    "urgent": false,
+    "top_ad": true,
+    "options": [
+     "bundle_basic"
+    ],
+    "b2c_ad_page": false,
+    "premium_ad_page": false
+   },
+   "params": [
+    {
+     "key": "pets",
+     "name": "Zwierzęta",
+     "type": "select",
+     "value": {
+      "key": "Tak",
+      "label": "Tak"
+     }
+    },
+    {
+     "key": "winda",
+     "name": "Winda",
+     "type": "select",
+     "value": {
+      "key": "Nie",
+      "label": "Nie"
+     }
+    },
+    {
+     "key": "parking",
+     "name": "Parking",
+     "type": "checkboxes",
+     "value": {
+      "key": [
+       "brak",
+       "przynależne na ulicy"
+      ],
+      "label": "brak, przynależne na ulicy"
+     }
+    },
+    {
+     "key": "floor_select",
+     "name": "Poziom",
+     "type": "select",
+     "value": {
+      "key": "floor_4",
+      "label": "4"
+     }
+    },
+    {
+     "key": "furniture",
+     "name": "Umeblowane",
+     "type": "select",
+     "value": {
+      "key": "yes",
+      "label": "Tak"
+     }
+    },
+    {
+     "key": "price",
+     "name": "Cena",
+     "type": "price",
+     "value": {
+      "value": 1600,
+      "type": "price",
+      "arranged": false,
+      "budget": false,
+      "currency": "PLN",
+      "negotiable": false,
+      "converted_value": null,
+      "previous_value": null,
+      "converted_previous_value": null,
+      "converted_currency": null,
+      "label": "1 600 zł",
+      "previous_label": null
+     }
+    },
+    {
+     "key": "builttype",
+     "name": "Rodzaj zabudowy",
+     "type": "select",
+     "value": {
+      "key": "kamienica",
+      "label": "Kamienica"
+     }
+    },
+    {
+     "key": "m",
+     "name": "Powierzchnia",
+     "type": "input",
+     "value": {
+      "key": "77",
+      "label": "77 m²"
+     }
+    },
+    {
+     "key": "rooms",
+     "name": "Liczba pokoi",
+     "type": "select",
+     "value": {
+      "key": "three",
+      "label": "3 pokoje"
+     }
+    },
+    {
+     "key": "rent",
+     "name": "Czynsz (dodatkowo)",
+     "type": "input",
+     "value": {
+      "key": "300",
+      "label": "300 zł"
+     }
+    }
+   ],
+   "key_params": [
+    "m",
+    "rooms"
+   ],
+   "business": false,
+   "user": {
+    "id": 5001,
+    "name": "Użytkownik 1",
+    "created": "2024-03-26T12:03:31+01:00",
+    "other_ads_enabled": true,
+    "logo": null,
+    "photo": null,
+    "company_name": "",
+    "seller_type": null
+   },
+   "status": "active",
+   "contact": {
+    "name": "Użytkownik 1",
+    "phone": true,
+    "chat": true,
+    "negotiation": false,
+    "courier": false
+   },
+   "map": {
+    "zoom": 13,
+    "lat": 51.115,
+    "lon": 17.066,
+    "radius": 8,
+    "show_detailed": false
+   },
+   "location": {
+    "city": {
+     "id": 19701,
+     "name": "Wrocław",
+     "normalized_name": "wroclaw"
+    },
+    "district": {
+     "id": 387,
+     "name": "Śródmieście"
+    },
+    "region": {
+     "id": 3,
+     "name": "Dolnośląskie",
+     "normalized_name": "dolnoslaskie"
+    }
+   },
+   "photos": [
+    {
+     "id": 8010,
+     "filename": "test1-0",
+     "rotation": 0,
+     "width": 1000,
+     "height": 750,
+     "link": "https://example.invalid/olx/test1-0/image;s={width}x{height}"
+    },
+    {
+     "id": 8011,
+     "filename": "test1-1",
+     "rotation": 0,
+     "width": 1000,
+     "height": 750,
+     "link": "https://example.invalid/olx/test1-1/image;s={width}x{height}"
+    }
+   ],
+   "partner": null,
+   "category": {
+    "id": 15,
+    "type": "real_estate"
+   },
+   "offer_type": "offer",
+   "protect_phone": true
+  },
+  {
+   "id": 910000002,
+   "url": "https://www.olx.pl/d/oferta/okazja-2-os-duzy-pokoj-idealny-do-nauki-centrum-bez-dodatkowego-czynszu-CID3-IDtest2.html",
+   "title": "OKAZJA- 2-os. duży pokój idealny do nauki- CENTRUM- bez dodatkowego czynszu",
+   "last_refresh_time": "2026-09-17T18:29:34+02:00",
+   "created_time": "2026-09-07T22:30:27+02:00",
+   "valid_to_time": "2026-10-07T22:30:27+02:00",
+   "pushup_time": "2026-09-17T18:29:34+02:00",
+   "description": "Do wynajęcia duży, słoneczny, wygodny 2-os. pokój w mieszkaniu studenckim (w drugim pokoju mieszka spokojna studentka). Mieszkanie jest przytulne, 2-pokojowe, rozkładowe z dużą jasną oddzielną kuchnią. Doskonała lokalizacja, w pobliżu Wydziału Architektury, Uniwersytetu Medycznego, Politechniki, placu Grunwaldzkiego. W okolicy apteka, Biedronka, Żabki, sklep warzywny, Park Stanisława Tołpy, …",
+   "promotion": {
+    "highlighted": true,
+    "urgent": false,
+    "top_ad": true,
+    "options": [
+     "bundle_optimum"
+    ],
+    "b2c_ad_page": false,
+    "premium_ad_page": false
+   },
+   "params": [
+    {
+     "key": "pets",
+     "name": "Zwierzęta",
+     "type": "select",
+     "value": {
+      "key": "Nie",
+      "label": "Nie"
+     }
+    },
+    {
+     "key": "winda",
+     "name": "Winda",
+     "type": "select",
+     "value": {
+      "key": "Nie",
+      "label": "Nie"
+     }
+    },
+    {
+     "key": "parking",
+     "name": "Parking",
+     "type": "checkboxes",
+     "value": {
+      "key": [
+       "przynależne na ulicy"
+      ],
+      "label": "przynależne na ulicy"
+     }
+    },
+    {
+     "key": "floor_select",
+     "name": "Poziom",
+     "type": "select",
+     "value": {
+      "key": "floor_3",
+      "label": "3"
+     }
+    },
+    {
+     "key": "furniture",
+     "name": "Umeblowane",
+     "type": "select",
+     "value": {
+      "key": "yes",
+      "label": "Tak"
+     }
+    },
+    {
+     "key": "price",
+     "name": "Cena",
+     "type": "price",
+     "value": {
+      "value": 790,
+      "type": "price",
+      "arranged": false,
+      "budget": false,
+      "currency": "PLN",
+      "negotiable": false,
+      "converted_value": null,
+      "previous_value": null,
+      "converted_previous_value": null,
+      "converted_currency": null,
+      "label": "790 zł",
+      "previous_label": null
+     }
+    },
+    {
+     "key": "builttype",
+     "name": "Rodzaj zabudowy",
+     "type": "select",
+     "value": {
+      "key": "kamienica",
+      "label": "Kamienica"
+     }
+    },
+    {
+     "key": "m",
+     "name": "Powierzchnia",
+     "type": "input",
+     "value": {
+      "key": "47",
+      "label": "47 m²"
+     }
+    },
+    {
+     "key": "rooms",
+     "name": "Liczba pokoi",
+     "type": "select",
+     "value": {
+      "key": "two",
+      "label": "2 pokoje"
+     }
+    }
+   ],
+   "key_params": [
+    "m",
+    "rooms"
+   ],
+   "business": false,
+   "user": {
+    "id": 5002,
+    "name": "Użytkownik 2",
+    "created": "2025-09-01T22:30:21+02:00",
+    "other_ads_enabled": true,
+    "logo": null,
+    "photo": null,
+    "company_name": "",
+    "seller_type": null
+   },
+   "status": "active",
+   "contact": {
+    "name": "Użytkownik 2",
+    "phone": true,
+    "chat": true,
+    "negotiation": false,
+    "courier": false
+   },
+   "map": {
+    "zoom": 13,
+    "lat": 51.115,
+    "lon": 17.064,
+    "radius": 8,
+    "show_detailed": false
+   },
+   "location": {
+    "city": {
+     "id": 19701,
+     "name": "Wrocław",
+     "normalized_name": "wroclaw"
+    },
+    "district": {
+     "id": 387,
+     "name": "Śródmieście"
+    },
+    "region": {
+     "id": 3,
+     "name": "Dolnośląskie",
+     "normalized_name": "dolnoslaskie"
+    }
+   },
+   "photos": [
+    {
+     "id": 8020,
+     "filename": "test2-0",
+     "rotation": 0,
+     "width": 3024,
+     "height": 4032,
+     "link": "https://example.invalid/olx/test2-0/image;s={width}x{height}"
+    },
+    {
+     "id": 8021,
+     "filename": "test2-1",
+     "rotation": 0,
+     "width": 3024,
+     "height": 4032,
+     "link": "https://example.invalid/olx/test2-1/image;s={width}x{height}"
+    }
+   ],
+   "partner": null,
+   "category": {
+    "id": 15,
+    "type": "real_estate"
+   },
+   "offer_type": "offer",
+   "protect_phone": true
+  }
+ ],
+ "metadata": {
+  "total_elements": 218,
+  "visible_total_count": 218,
+  "promoted": [
+   0,
+   1,
+   2,
+   12,
+   13,
+   14,
+   24,
+   25,
+   26,
+   36,
+   37,
+   38
+  ]
+ },
+ "links": {
+  "self": {
+   "href": "https://www.olx.pl/api/v1/offers?category_id=15&city_id=19701&sort_by=created_at%3Adesc&limit=40&offset=0&filter_float_price%3Afrom=0&filter_float_price%3Ato=1999"
+  },
+  "next": {
+   "href": "https://www.olx.pl/api/v1/offers?category_id=15&city_id=19701&sort_by=created_at%3Adesc&limit=40&offset=37&filter_float_price%3Afrom=0&filter_float_price%3Ato=1999"
+  },
+  "first": {
+   "href": "https://www.olx.pl/api/v1/offers?category_id=15&city_id=19701&sort_by=created_at%3Adesc&limit=40&offset=0&filter_float_price%3Afrom=0&filter_float_price%3Ato=1999"
+  }
+ }
+}

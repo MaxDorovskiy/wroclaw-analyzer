@@ -12,6 +12,16 @@
   x-datadome / cookie datadome / «dd» в теле. На него — пауза и, если
   разрешено, тот же адрес через Playwright (в 3–5 раз медленнее, поэтому
   только как фолбэк).
+- OLX стоит за CloudFront WAF, который режет САМ КЛИЕНТ (отпечаток TLS/HTTP2
+  у Python), а не IP и не темп: 18.09.2026 с одного ПК httpx получал 403
+  «Request blocked» на любой адрес olx.pl (даже robots.txt), а Chromium — 200.
+  Пауза тут не лечит, поэтому на такой блок браузер зовём сразу, а хост
+  запоминаем (`_browser_hosts`): дальше по нему ходим только браузером, без
+  заведомо битого httpx-запроса — иначе темп к площадке удваивается, и
+  половина запросов — сплошные блоки в её логах.
+- JSON браузером берём через fetch() СО СТРАНИЦЫ того же origin — так ходит
+  сам сайт (куки, Sec-Fetch-Site: same-origin). page.goto() на JSON не годится:
+  friendly-links отдаёт application/x-json, и Chromium начинает «download».
 - Перед каждым запросом спрашиваем `stop_check()`: пауза и «стоп» из
   интерфейса должны сворачивать прогон за полминуты, а не после страницы №140.
 """
@@ -19,7 +29,7 @@ import logging
 import random
 import time
 from pathlib import Path
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Set
 
 import httpx
 
@@ -57,9 +67,24 @@ class StopRequested(Exception):
     """Владелец нажал «стоп» или включил паузу."""
 
 
+def fingerprint_blocked(resp: httpx.Response) -> bool:
+    """403 от самого CloudFront («Request blocked», x-cache: Error from cloudfront):
+    WAF отверг клиента по отпечатку. Пауза и ретрай бесполезны — только браузер."""
+    if resp.status_code != 403:
+        return False
+    h = {k.lower(): v for k, v in resp.headers.items()}
+    if "cloudfront" not in h.get("server", "").lower():
+        return False
+    if "error from cloudfront" in h.get("x-cache", "").lower():
+        return True
+    return "request blocked" in resp.text[:2000].lower()
+
+
 def looks_blocked(resp: httpx.Response) -> bool:
     if resp.status_code not in (403, 401, 429, 503):
         return False
+    if fingerprint_blocked(resp):
+        return True
     h = {k.lower(): v for k, v in resp.headers.items()}
     if any(k.startswith("x-datadome") or k == "x-dd-b" for k in h):
         return True
@@ -68,6 +93,13 @@ def looks_blocked(resp: httpx.Response) -> bool:
     body = resp.text[:4000].lower() if resp.headers.get("content-type", "").startswith("text") else ""
     return ("datadome" in body or "captcha-delivery" in body or "cf-chl" in body
             or "attention required" in body or "access denied" in body)
+
+
+# fetch() изнутри страницы: тело как текст + статус (разбор JSON — на стороне Python)
+_FETCH_JS = """async (url) => {
+  const r = await fetch(url, {headers: {"Accept": "application/json"}, credentials: "include"});
+  return [r.status, await r.text()];
+}"""
 
 
 class Fetcher:
@@ -86,6 +118,8 @@ class Fetcher:
         self._pw = None
         self._browser = None
         self._page = None
+        self._page_origin: Optional[str] = None      # origin документа, открытого в браузере
+        self._browser_hosts: Set[str] = set()        # хосты, где httpx блокируется, а браузер проходит
 
     # ---------- темп ----------
     def _throttle(self):
@@ -109,31 +143,48 @@ class Fetcher:
     def get(self, url: str, params: Optional[dict] = None, json_api: bool = False,
             retries: int = 3) -> httpx.Response:
         headers = JSON_HEADERS if json_api else None
+        host = httpx.URL(url).host
         backoff = (8, 25, 70)
         last_exc = None
         for attempt in range(retries + 1):
             self._throttle()
             self.stats["requests"] += 1
-            try:
-                resp = self.client.get(url, params=params, headers=headers)
-            except (httpx.TimeoutException, httpx.TransportError) as e:
-                last_exc = e
-                log.warning("%s: %s (попытка %d)", url, e.__class__.__name__, attempt + 1)
-                self.stats["retries"] += 1
-                self._sleep(backoff[min(attempt, 2)])
-                continue
+            via_browser = host in self._browser_hosts
+            if via_browser:
+                resp = self.browser_get(url, params, json_api)
+                if resp is None:
+                    raise BlockedError(u"%s: httpx блокируется, а браузер не справился" % host)
+            else:
+                try:
+                    resp = self.client.get(url, params=params, headers=headers)
+                except (httpx.TimeoutException, httpx.TransportError) as e:
+                    last_exc = e
+                    log.warning("%s: %s (попытка %d)", url, e.__class__.__name__, attempt + 1)
+                    self.stats["retries"] += 1
+                    self._sleep(backoff[min(attempt, 2)])
+                    continue
             if resp.status_code == 200:
                 self._blocked_streak = 0
                 return resp
-            if looks_blocked(resp):
+            # браузером 401/403 — блок без оговорок: заголовков WAF fetch() не отдаёт
+            if looks_blocked(resp) or (via_browser and resp.status_code in (401, 403)):
                 self.stats["blocked"] += 1
                 self._blocked_streak += 1
-                log.warning("Похоже на блок (%d) на %s, серия %d", resp.status_code, url,
-                            self._blocked_streak)
-                if self.mode == "browser" or self._blocked_streak >= 3:
-                    html = self.browser_get(url, params)
-                    if html is not None:
-                        return httpx.Response(200, text=html, request=resp.request)
+                fingerprint = fingerprint_blocked(resp)
+                log.warning("Похоже на блок (%d%s) на %s, серия %d", resp.status_code,
+                            u", отпечаток клиента" if fingerprint else "", url, self._blocked_streak)
+                if not via_browser and (self.mode == "browser" or fingerprint or self._blocked_streak >= 3):
+                    br = self.browser_get(url, params, json_api)
+                    if br is not None and br.status_code == 200:
+                        # браузер прошёл там, где httpx заблокирован: до конца прогона этот
+                        # хост — только браузером (см. докстринг модуля)
+                        self._browser_hosts.add(host)
+                        self._blocked_streak = 0
+                        log.info("%s: дальше через Chromium", host)
+                        return br
+                    if fingerprint and br is None:
+                        raise BlockedError(u"%s -> %d: WAF режет httpx по отпечатку, нужен Chromium "
+                                           u"(playwright install chromium)" % (url, resp.status_code))
                 if attempt >= retries:
                     raise BlockedError("%s -> %d" % (url, resp.status_code))
                 self._sleep(60 * (attempt + 1))
@@ -170,16 +221,19 @@ class Fetcher:
         return resp.json()
 
     # ---------- фолбэк: настоящий браузер ----------
-    def browser_get(self, url: str, params: Optional[dict] = None) -> Optional[str]:
-        """Открывает страницу в Chromium (Playwright) и отдаёт HTML.
-        Возвращает None, если Playwright не установлен — тогда работаем как есть."""
+    def browser_get(self, url: str, params: Optional[dict] = None,
+                    json_api: bool = False) -> Optional[httpx.Response]:
+        """Тот же адрес через Chromium (Playwright). HTML — page.goto() и содержимое
+        страницы после челленджа; JSON — fetch() со страницы того же origin.
+        None — Playwright не установлен или браузер упал: тогда работаем как есть."""
         try:
             from playwright.sync_api import sync_playwright
         except ImportError:
             log.error("Playwright не установлен: pip install playwright && playwright install chromium")
             return None
-        if params:
-            url = str(httpx.URL(url, params=params))
+        full = httpx.URL(url, params=params) if params else httpx.URL(url)
+        origin = "%s://%s" % (full.scheme, full.host)
+        request = httpx.Request("GET", full)
         try:
             if self._pw is None:
                 self._pw = sync_playwright().start()
@@ -188,15 +242,26 @@ class Fetcher:
                                                 viewport={"width": 1366, "height": 900})
                 self._page = ctx.new_page()
             self.stats["browser"] += 1
-            self._page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            if json_api:
+                if self._page_origin != origin:
+                    # документ того же origin для fetch(): robots.txt лёгкий, без
+                    # баннеров согласия и никогда не «download»
+                    self._page.goto(origin + "/robots.txt", wait_until="domcontentloaded", timeout=60000)
+                    self._page_origin = origin
+                status, body = self._page.evaluate(_FETCH_JS, str(full))
+                return httpx.Response(int(status), text=body, request=request)
+            nav = self._page.goto(str(full), wait_until="domcontentloaded", timeout=60000)
+            self._page_origin = origin
             # DataDome-челлендж решается скриптом на странице за пару секунд
             self._page.wait_for_timeout(2500)
             html = self._page.content()
-            if "__NEXT_DATA__" in html or '"data"' in html:
-                self._blocked_streak = 0
-            return html
+            # после челленджа статус первого ответа уже ничего не значит: страница
+            # с данными — это 200, что бы ни пришло сначала
+            status = 200 if ("__NEXT_DATA__" in html or nav is None) else nav.status
+            return httpx.Response(status, text=html, request=request)
         except Exception as e:  # noqa: BLE001 — любой сбой браузера = фолбэк не помог
-            log.error("Браузер не справился с %s: %s", url, e)
+            log.error("Браузер не справился с %s: %s", full, e)
+            self._page_origin = None
             return None
 
     def close(self):
@@ -210,6 +275,7 @@ class Fetcher:
                 except Exception:  # noqa: BLE001
                     pass
                 self._browser = self._pw = self._page = None
+                self._page_origin = None
 
     # ---------- сырые ответы для разбора ----------
     def dump(self, name: str, text: str):

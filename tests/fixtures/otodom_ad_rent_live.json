@@ -1,0 +1,452 @@
+{
+ "props": {
+  "pageProps": {
+   "ad": {
+    "id": 70000002,
+    "publicId": "test2",
+    "advertType": "AGENCY",
+    "advertiserType": "business",
+    "status": "active",
+    "market": "ALL",
+    "source": "urn:partner:imo-qa",
+    "title": "Mieszkanie na dynamicznym Jagodnie 1.11.2026",
+    "slug": "mieszkanie-na-dynamicznym-jagodnie-1-11-2026-ID4test2",
+    "url": "https://www.otodom.pl/pl/oferta/mieszkanie-na-dynamicznym-jagodnie-1-11-2026-ID4test2",
+    "description": "<strong>Opiekun Oferty</strong><br/>Jan Kowalski<br/>tel.  600 100 200<br/><br/><br/>Mieszkanie znajduję się przy ulicy Artemskiej Beaty w dzielnicy Jagodno. <br/><br/>\n<p>Mieszkanie dostępne od 1 listopada 2026.</p><br/>\nBędzie to drugi najem mieszkanie w pełni wyposażonego mieszkania.<br/><br/><br/><strong>OTOCZENIE NIERUCHOMOŚCI:</strong><br/>Mieszkanie jest dobrze skomunikowane z centrum …",
+    "createdAt": "2026-09-18T08:32:22Z",
+    "modifiedAt": "2026-09-18T08:33:21Z",
+    "pushedUpAt": null,
+    "characteristics": [
+     {
+      "key": "price",
+      "value": "2400",
+      "currency": "PLN",
+      "localizedValue": "2400 zł"
+     },
+     {
+      "key": "rent",
+      "value": "850",
+      "currency": "PLN",
+      "localizedValue": "850 zł"
+     },
+     {
+      "key": "deposit",
+      "value": "3250",
+      "currency": "PLN",
+      "localizedValue": "3250 zł"
+     },
+     {
+      "key": "m",
+      "value": "41",
+      "localizedValue": "41 m²",
+      "currency": ""
+     },
+     {
+      "key": "building_type",
+      "value": "block",
+      "localizedValue": "",
+      "currency": ""
+     },
+     {
+      "key": "floor_no",
+      "value": "floor_3",
+      "localizedValue": "",
+      "currency": ""
+     },
+     {
+      "key": "construction_status",
+      "value": "ready_to_use",
+      "localizedValue": "",
+      "currency": ""
+     },
+     {
+      "key": "windows_type",
+      "value": "plastic",
+      "localizedValue": "",
+      "currency": ""
+     },
+     {
+      "key": "heating",
+      "value": "urban",
+      "localizedValue": "",
+      "currency": ""
+     },
+     {
+      "key": "rooms_num",
+      "value": "2",
+      "localizedValue": "2",
+      "currency": ""
+     },
+     {
+      "key": "build_year",
+      "value": "2022",
+      "localizedValue": "2022",
+      "currency": ""
+     },
+     {
+      "key": "building_floors_num",
+      "value": "3",
+      "localizedValue": "3",
+      "currency": ""
+     },
+     {
+      "key": "free_from",
+      "value": "2022-08-16",
+      "localizedValue": "2022-08-16",
+      "currency": ""
+     }
+    ],
+    "target": {
+     "Area": "41",
+     "AreaRange": [],
+     "Build_year": "2022",
+     "Building_floors_num": "3",
+     "Building_type": [
+      "block"
+     ],
+     "City": "wroclaw",
+     "City_id": "39",
+     "Construction_status": [
+      "ready_to_use"
+     ],
+     "Country": "Polska",
+     "Extras_types": [
+      "lift",
+      "balcony"
+     ],
+     "Floor_no": [
+      "floor_3"
+     ],
+     "Heating": [
+      "urban"
+     ],
+     "Id": "70000002",
+     "Media_types": [
+      "cable-television",
+      "internet"
+     ],
+     "ObidoAdvert": "n",
+     "OfferType": "wynajem",
+     "Photo": "",
+     "Price": 2399,
+     "PriceRange": [
+      "2001-3000"
+     ],
+     "ProperType": "mieszkanie",
+     "Province": "dolnoslaskie",
+     "RegularUser": "n",
+     "Rent": 500,
+     "Rooms_num": [
+      "2"
+     ],
+     "Security_types": [
+      "entryphone"
+     ],
+     "Subregion": "powiat-wroclaw",
+     "Title": "",
+     "Windows_type": [
+      "plastic"
+     ],
+     "categoryId": "102",
+     "env": "production",
+     "hidePrice": "0",
+     "seller_id": "1002",
+     "user_type": "agency"
+    },
+    "features": [],
+    "featuresByCategory": [],
+    "featuresWithoutCategory": [],
+    "additionalInformation": [
+     {
+      "label": "advertiser_type",
+      "values": [
+       "advertiser_type::agency"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "build_year",
+      "values": [
+       "2022"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "security_types",
+      "values": [
+       "security_types-102::entryphone"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "rent_to_students",
+      "values": [
+       "::y"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "extras_types",
+      "values": [
+       "extras_types::lift",
+       "extras_types::balcony"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "lift",
+      "values": [
+       "::y"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "building_type",
+      "values": [
+       "building_type::block"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "heating",
+      "values": [
+       "heating::urban"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "media_types",
+      "values": [
+       "media_types::cable-television",
+       "media_types::internet"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "windows_type",
+      "values": [
+       "windows_type::plastic"
+      ],
+      "unit": ""
+     }
+    ],
+    "topInformation": [
+     {
+      "label": "area",
+      "values": [
+       "41"
+      ],
+      "unit": "m²"
+     },
+     {
+      "label": "construction_status",
+      "values": [
+       "construction_status::ready_to_use"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "rent",
+      "values": [
+       "850 zł"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "deposit",
+      "values": [
+       "3250 zł"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "floor",
+      "values": [
+       "floor_no::floor_3",
+       "/3"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "rooms_num",
+      "values": [
+       "2"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "heating",
+      "values": [
+       "heating::urban"
+      ],
+      "unit": ""
+     },
+     {
+      "label": "free_from",
+      "values": [
+       "2022-08-16"
+      ],
+      "unit": ""
+     }
+    ],
+    "location": {
+     "id": "orn:otodompl:location:dolnoslaskie/wroclaw/wroclaw/wroclaw/krzyki/jagodno",
+     "coordinates": {
+      "latitude": 51.056,
+      "longitude": 17.052,
+      "__typename": "Coordinates"
+     },
+     "mapDetails": {
+      "radius": 0,
+      "zoom": 12,
+      "__typename": "MapDetails"
+     },
+     "reverseGeocoding": {
+      "locations": [
+       {
+        "id": "dolnoslaskie",
+        "locationLevel": "voivodeship",
+        "name": "dolnośląskie",
+        "fullName": "dolnośląskie",
+        "fullNameItems": [
+         "dolnośląskie"
+        ],
+        "parentIds": [],
+        "__typename": "BasicLocationObject"
+       },
+       {
+        "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw",
+        "locationLevel": "city_or_village",
+        "name": "Wrocław",
+        "fullName": "Wrocław, dolnośląskie",
+        "fullNameItems": [
+         "Wrocław",
+         "dolnośląskie"
+        ],
+        "parentIds": [
+         "dolnoslaskie",
+         "dolnoslaskie/wroclaw",
+         "dolnoslaskie/wroclaw/wroclaw"
+        ],
+        "__typename": "BasicLocationObject"
+       },
+       {
+        "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw/krzyki",
+        "locationLevel": "district",
+        "name": "Krzyki",
+        "fullName": "Krzyki, Wrocław, dolnośląskie",
+        "fullNameItems": [
+         "Krzyki",
+         "Wrocław",
+         "dolnośląskie"
+        ],
+        "parentIds": [
+         "dolnoslaskie",
+         "dolnoslaskie/wroclaw",
+         "dolnoslaskie/wroclaw/wroclaw",
+         "dolnoslaskie/wroclaw/wroclaw/wroclaw"
+        ],
+        "__typename": "BasicLocationObject"
+       },
+       {
+        "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw/krzyki/jagodno",
+        "locationLevel": "residential",
+        "name": "Jagodno",
+        "fullName": "Jagodno, Krzyki, Wrocław, dolnośląskie",
+        "fullNameItems": [
+         "Jagodno",
+         "Krzyki",
+         "Wrocław",
+         "dolnośląskie"
+        ],
+        "parentIds": [
+         "dolnoslaskie",
+         "dolnoslaskie/wroclaw",
+         "dolnoslaskie/wroclaw/wroclaw",
+         "dolnoslaskie/wroclaw/wroclaw/wroclaw",
+         "dolnoslaskie/wroclaw/wroclaw/wroclaw/krzyki"
+        ],
+        "__typename": "BasicLocationObject"
+       }
+      ]
+     },
+     "address": {
+      "street": {
+       "name": "Artemskiej Beaty",
+       "number": ""
+      },
+      "subdistrict": null,
+      "district": null,
+      "city": null,
+      "county": null,
+      "municipality": null,
+      "province": null,
+      "postalCode": null
+     }
+    },
+    "owner": {
+     "id": 1002,
+     "type": "agency",
+     "name": "Biuro Nieruchomości 2",
+     "phones": [
+      "+48600100200"
+     ],
+     "imageUrl": null,
+     "contacts": [
+      {
+       "name": "Jan Kowalski",
+       "phone": "+48600100200",
+       "imageURLSmall": null,
+       "hasPhoneNumber": true
+      }
+     ]
+    },
+    "agency": {
+     "id": 1002,
+     "name": "Biuro Nieruchomości 2",
+     "type": "agency",
+     "slug": "biuro-2-ID1002",
+     "imageUrl": null,
+     "phones": [
+      "+48600100200"
+     ],
+     "hasPhoneNumber": true,
+     "url": "/pl/firmy/biura-nieruchomosci/biuro-2"
+    },
+    "contactDetails": {
+     "name": "Jan Kowalski",
+     "type": "agency",
+     "phones": [
+      "+48600100200"
+     ],
+     "imageUrl": null,
+     "hasPhoneNumber": true
+    },
+    "images": [
+     {
+      "thumbnail": "https://example.invalid/otodom/ad2-0-thumb.jpg",
+      "small": "https://example.invalid/otodom/ad2-0-small.jpg",
+      "medium": "https://example.invalid/otodom/ad2-0-medium.jpg",
+      "large": "https://example.invalid/otodom/ad2-0-large.jpg"
+     },
+     {
+      "thumbnail": "https://example.invalid/otodom/ad2-1-thumb.jpg",
+      "small": "https://example.invalid/otodom/ad2-1-small.jpg",
+      "medium": "https://example.invalid/otodom/ad2-1-medium.jpg",
+      "large": "https://example.invalid/otodom/ad2-1-large.jpg"
+     },
+     {
+      "thumbnail": "https://example.invalid/otodom/ad2-2-thumb.jpg",
+      "small": "https://example.invalid/otodom/ad2-2-small.jpg",
+      "medium": "https://example.invalid/otodom/ad2-2-medium.jpg",
+      "large": "https://example.invalid/otodom/ad2-2-large.jpg"
+     }
+    ],
+    "property": {},
+    "price": {
+     "type": "VISIBLE"
+    }
+   }
+  }
+ }
+}

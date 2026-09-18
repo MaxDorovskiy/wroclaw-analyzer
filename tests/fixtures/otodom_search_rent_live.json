@@ -1,0 +1,476 @@
+{
+ "props": {
+  "pageProps": {
+   "data": {
+    "searchAds": {
+     "__typename": "FoundAds",
+     "items": [
+      {
+       "id": 70000001,
+       "title": "Mieszkanie na dynamicznym Jagodnie 1.11.2026",
+       "slug": "mieszkanie-na-dynamicznym-jagodnie-1-11-2026-ID4test1",
+       "estate": "FLAT",
+       "developmentId": 0,
+       "developmentTitle": null,
+       "developmentUrl": null,
+       "transaction": "RENT",
+       "location": {
+        "mapDetails": {
+         "radius": 0,
+         "__typename": "MapDetails"
+        },
+        "address": {
+         "street": {
+          "name": "Artemskiej Beaty",
+          "number": "",
+          "__typename": "Street"
+         },
+         "city": {
+          "name": "Wrocław",
+          "__typename": "City"
+         },
+         "province": {
+          "name": "dolnośląskie",
+          "__typename": "Province"
+         },
+         "__typename": "Address"
+        },
+        "reverseGeocoding": {
+         "locations": [
+          {
+           "id": "dolnoslaskie",
+           "name": "dolnośląskie",
+           "locationLevel": "voivodeship",
+           "fullName": "dolnośląskie",
+           "__typename": "BasicLocationObject"
+          },
+          {
+           "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw",
+           "name": "Wrocław",
+           "locationLevel": "city_or_village",
+           "fullName": "Wrocław, dolnośląskie",
+           "__typename": "BasicLocationObject"
+          },
+          {
+           "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw/krzyki",
+           "name": "Krzyki",
+           "locationLevel": "district",
+           "fullName": "Krzyki, Wrocław, dolnośląskie",
+           "__typename": "BasicLocationObject"
+          },
+          {
+           "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw/krzyki/jagodno",
+           "name": "Jagodno",
+           "locationLevel": "residential",
+           "fullName": "Jagodno, Krzyki, Wrocław, dolnośląskie",
+           "__typename": "BasicLocationObject"
+          }
+         ],
+         "__typename": "ReverseGeocoding"
+        },
+        "__typename": "LocationDetails"
+       },
+       "images": [
+        {
+         "medium": "https://example.invalid/otodom/1-0-medium.jpg",
+         "large": "https://example.invalid/otodom/1-0-large.jpg",
+         "__typename": "AdvertListItemImage"
+        },
+        {
+         "medium": "https://example.invalid/otodom/1-1-medium.jpg",
+         "large": "https://example.invalid/otodom/1-1-large.jpg",
+         "__typename": "AdvertListItemImage"
+        }
+       ],
+       "totalPossibleImages": 14,
+       "isExclusiveOffer": false,
+       "isPrivateOwner": false,
+       "isPromoted": false,
+       "extendedAdvertiserType": null,
+       "source": "urn:partner:imo-qa",
+       "agency": {
+        "id": 1001,
+        "name": "Biuro Nieruchomości 1",
+        "type": "AGENCY",
+        "slug": "biuro-1-ID1001",
+        "imageUrl": null,
+        "brandingVisible": true,
+        "highlightedAds": false,
+        "__typename": "AgencyListingDetails"
+       },
+       "openDays": null,
+       "totalPrice": {
+        "value": 2400,
+        "currency": "PLN",
+        "__typename": "Money"
+       },
+       "rentPrice": {
+        "value": 850,
+        "currency": "PLN",
+        "__typename": "Money"
+       },
+       "priceFromPerSquareMeter": null,
+       "pricePerSquareMeter": {
+        "value": 58.54,
+        "currency": "PLN",
+        "__typename": "Money"
+       },
+       "areaInSquareMeters": 41,
+       "terrainAreaInSquareMeters": null,
+       "roomsNumber": "TWO",
+       "hidePrice": false,
+       "floorNumber": "THIRD",
+       "investmentState": null,
+       "investmentUnitsAreaInSquareMeters": null,
+       "peoplePerRoom": null,
+       "dateCreated": "2026-09-18 10:32:29",
+       "createdAtFirst": "2026-09-18T10:32:22Z",
+       "investmentUnitsNumber": null,
+       "investmentUnitsRoomsNumber": null,
+       "investmentUnitsFloorsRange": null,
+       "investmentEstimatedDelivery": null,
+       "pushedUpAt": null,
+       "specialOffer": null,
+       "shortDescription": "(skrócony opis z wyników — adapter go nie czyta, w fiksturze pominięty)",
+       "organisationAssignedMember": null,
+       "advertOwner": {
+        "name": "Doradca",
+        "imageUrl": null,
+        "__typename": "LegacyAdvertOwner"
+       },
+       "tags": [
+        {
+         "value": "BALCONY",
+         "weight": 35,
+         "__typename": "AdvertListItemTag"
+        },
+        {
+         "value": "TOP_FLOOR",
+         "weight": 20,
+         "__typename": "AdvertListItemTag"
+        }
+       ],
+       "__typename": "AdvertListItem",
+       "showPremiumTile": false,
+       "development": null,
+       "href": "[lang]/ad/mieszkanie-na-dynamicznym-jagodnie-1-11-2026-ID4test1"
+      },
+      {
+       "id": 70000002,
+       "title": "3-pok od 01.10.2026 ul. Mieszczańska 11 *River Point * Balkon*Garaż",
+       "slug": "3-pok-od-01-10-2026-ul-mieszczanska-11-river-point-balkongaraz-ID4test2",
+       "estate": "FLAT",
+       "developmentId": 0,
+       "developmentTitle": null,
+       "developmentUrl": null,
+       "transaction": "RENT",
+       "location": {
+        "mapDetails": {
+         "radius": 0,
+         "__typename": "MapDetails"
+        },
+        "address": {
+         "street": {
+          "name": "ul. Mieszczańska",
+          "number": "",
+          "__typename": "Street"
+         },
+         "city": {
+          "name": "Wrocław",
+          "__typename": "City"
+         },
+         "province": {
+          "name": "dolnośląskie",
+          "__typename": "Province"
+         },
+         "__typename": "Address"
+        },
+        "reverseGeocoding": {
+         "locations": [
+          {
+           "id": "dolnoslaskie",
+           "name": "dolnośląskie",
+           "locationLevel": "voivodeship",
+           "fullName": "dolnośląskie",
+           "__typename": "BasicLocationObject"
+          },
+          {
+           "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw",
+           "name": "Wrocław",
+           "locationLevel": "city_or_village",
+           "fullName": "Wrocław, dolnośląskie",
+           "__typename": "BasicLocationObject"
+          },
+          {
+           "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw/srodmiescie",
+           "name": "Śródmieście",
+           "locationLevel": "district",
+           "fullName": "Śródmieście, Wrocław, dolnośląskie",
+           "__typename": "BasicLocationObject"
+          },
+          {
+           "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw/srodmiescie/nadodrze",
+           "name": "Nadodrze",
+           "locationLevel": "residential",
+           "fullName": "Nadodrze, Śródmieście, Wrocław, dolnośląskie",
+           "__typename": "BasicLocationObject"
+          }
+         ],
+         "__typename": "ReverseGeocoding"
+        },
+        "__typename": "LocationDetails"
+       },
+       "images": [
+        {
+         "medium": "https://example.invalid/otodom/2-0-medium.jpg",
+         "large": "https://example.invalid/otodom/2-0-large.jpg",
+         "__typename": "AdvertListItemImage"
+        },
+        {
+         "medium": "https://example.invalid/otodom/2-1-medium.jpg",
+         "large": "https://example.invalid/otodom/2-1-large.jpg",
+         "__typename": "AdvertListItemImage"
+        }
+       ],
+       "totalPossibleImages": 14,
+       "isExclusiveOffer": false,
+       "isPrivateOwner": false,
+       "isPromoted": false,
+       "extendedAdvertiserType": null,
+       "source": "urn:site:local",
+       "agency": {
+        "id": 1002,
+        "name": "Biuro Nieruchomości 2",
+        "type": "AGENCY",
+        "slug": "biuro-2-ID1002",
+        "imageUrl": null,
+        "brandingVisible": true,
+        "highlightedAds": false,
+        "__typename": "AgencyListingDetails"
+       },
+       "openDays": null,
+       "totalPrice": {
+        "value": 3500,
+        "currency": "PLN",
+        "__typename": "Money"
+       },
+       "rentPrice": null,
+       "priceFromPerSquareMeter": null,
+       "pricePerSquareMeter": {
+        "value": 50,
+        "currency": "PLN",
+        "__typename": "Money"
+       },
+       "areaInSquareMeters": 70,
+       "terrainAreaInSquareMeters": null,
+       "roomsNumber": "THREE",
+       "hidePrice": false,
+       "floorNumber": "FOURTH",
+       "investmentState": null,
+       "investmentUnitsAreaInSquareMeters": null,
+       "peoplePerRoom": null,
+       "dateCreated": "2026-09-18 09:49:23",
+       "createdAtFirst": "2026-09-18T09:49:13Z",
+       "investmentUnitsNumber": null,
+       "investmentUnitsRoomsNumber": null,
+       "investmentUnitsFloorsRange": null,
+       "investmentEstimatedDelivery": null,
+       "pushedUpAt": null,
+       "specialOffer": null,
+       "shortDescription": "(skrócony opis z wyników — adapter go nie czyta, w fiksturze pominięty)",
+       "organisationAssignedMember": null,
+       "advertOwner": {
+        "name": "Doradca",
+        "imageUrl": null,
+        "__typename": "LegacyAdvertOwner"
+       },
+       "tags": [
+        {
+         "value": "BALCONY",
+         "weight": 35,
+         "__typename": "AdvertListItemTag"
+        },
+        {
+         "value": "PARKING_SPOT",
+         "weight": 15,
+         "__typename": "AdvertListItemTag"
+        },
+        {
+         "value": "SECURE_BUILDING",
+         "weight": 10,
+         "__typename": "AdvertListItemTag"
+        }
+       ],
+       "__typename": "AdvertListItem",
+       "showPremiumTile": false,
+       "development": null,
+       "href": "[lang]/ad/3-pok-od-01-10-2026-ul-mieszczanska-11-river-point-balkongaraz-ID4test2"
+      },
+      {
+       "id": 70000003,
+       "title": "Kamienna/Śliczna/Media Miejskie/1 Wynajem/Balkon",
+       "slug": "kamienna-sliczna-media-miejskie-1-wynajem-balkon-ID4test3",
+       "estate": "FLAT",
+       "developmentId": 0,
+       "developmentTitle": null,
+       "developmentUrl": null,
+       "transaction": "RENT",
+       "location": {
+        "mapDetails": {
+         "radius": 0,
+         "__typename": "MapDetails"
+        },
+        "address": {
+         "street": {
+          "name": "Śliczna",
+          "number": "",
+          "__typename": "Street"
+         },
+         "city": {
+          "name": "Wrocław",
+          "__typename": "City"
+         },
+         "province": {
+          "name": "dolnośląskie",
+          "__typename": "Province"
+         },
+         "__typename": "Address"
+        },
+        "reverseGeocoding": {
+         "locations": [
+          {
+           "id": "dolnoslaskie",
+           "name": "dolnośląskie",
+           "locationLevel": "voivodeship",
+           "fullName": "dolnośląskie",
+           "__typename": "BasicLocationObject"
+          },
+          {
+           "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw",
+           "name": "Wrocław",
+           "locationLevel": "city_or_village",
+           "fullName": "Wrocław, dolnośląskie",
+           "__typename": "BasicLocationObject"
+          },
+          {
+           "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw/krzyki",
+           "name": "Krzyki",
+           "locationLevel": "district",
+           "fullName": "Krzyki, Wrocław, dolnośląskie",
+           "__typename": "BasicLocationObject"
+          },
+          {
+           "id": "dolnoslaskie/wroclaw/wroclaw/wroclaw/krzyki/powstancow-slaskich",
+           "name": "Powstańców Śląskich",
+           "locationLevel": "residential",
+           "fullName": "Powstańców Śląskich, Krzyki, Wrocław, dolnośląskie",
+           "__typename": "BasicLocationObject"
+          }
+         ],
+         "__typename": "ReverseGeocoding"
+        },
+        "__typename": "LocationDetails"
+       },
+       "images": [
+        {
+         "medium": "https://example.invalid/otodom/3-0-medium.jpg",
+         "large": "https://example.invalid/otodom/3-0-large.jpg",
+         "__typename": "AdvertListItemImage"
+        },
+        {
+         "medium": "https://example.invalid/otodom/3-1-medium.jpg",
+         "large": "https://example.invalid/otodom/3-1-large.jpg",
+         "__typename": "AdvertListItemImage"
+        }
+       ],
+       "totalPossibleImages": 19,
+       "isExclusiveOffer": false,
+       "isPrivateOwner": false,
+       "isPromoted": false,
+       "extendedAdvertiserType": null,
+       "source": "urn:partner:esticrm",
+       "agency": {
+        "id": 1003,
+        "name": "Biuro Nieruchomości 3",
+        "type": "AGENCY",
+        "slug": "biuro-3-ID1003",
+        "imageUrl": null,
+        "brandingVisible": true,
+        "highlightedAds": false,
+        "__typename": "AgencyListingDetails"
+       },
+       "openDays": null,
+       "totalPrice": {
+        "value": 2800,
+        "currency": "PLN",
+        "__typename": "Money"
+       },
+       "rentPrice": {
+        "value": 0,
+        "currency": "PLN",
+        "__typename": "Money"
+       },
+       "priceFromPerSquareMeter": null,
+       "pricePerSquareMeter": {
+        "value": 80,
+        "currency": "PLN",
+        "__typename": "Money"
+       },
+       "areaInSquareMeters": 35,
+       "terrainAreaInSquareMeters": null,
+       "roomsNumber": "TWO",
+       "hidePrice": false,
+       "floorNumber": "GROUND",
+       "investmentState": null,
+       "investmentUnitsAreaInSquareMeters": null,
+       "peoplePerRoom": null,
+       "dateCreated": "2026-09-18 08:57:53",
+       "createdAtFirst": "2026-09-18T08:57:42Z",
+       "investmentUnitsNumber": null,
+       "investmentUnitsRoomsNumber": null,
+       "investmentUnitsFloorsRange": null,
+       "investmentEstimatedDelivery": null,
+       "pushedUpAt": null,
+       "specialOffer": null,
+       "shortDescription": "(skrócony opis z wyników — adapter go nie czyta, w fiksturze pominięty)",
+       "organisationAssignedMember": null,
+       "advertOwner": {
+        "name": "Doradca",
+        "imageUrl": null,
+        "__typename": "LegacyAdvertOwner"
+       },
+       "tags": [
+        {
+         "value": "BALCONY",
+         "weight": 35,
+         "__typename": "AdvertListItemTag"
+        },
+        {
+         "value": "SECURE_BUILDING",
+         "weight": 10,
+         "__typename": "AdvertListItemTag"
+        },
+        {
+         "value": "GROUND_FLOOR",
+         "weight": 5,
+         "__typename": "AdvertListItemTag"
+        }
+       ],
+       "__typename": "AdvertListItem",
+       "showPremiumTile": false,
+       "development": null,
+       "href": "[lang]/ad/kamienna-sliczna-media-miejskie-1-wynajem-balkon-ID4test3"
+      }
+     ],
+     "pagination": {
+      "totalItems": 2586,
+      "totalPages": 36,
+      "currentPage": 1,
+      "itemsPerPage": 72,
+      "__typename": "SearchPagination"
+     }
+    }
+   }
+  }
+ }
+}
