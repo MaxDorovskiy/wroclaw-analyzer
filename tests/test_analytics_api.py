@@ -84,3 +84,30 @@ def test_api_roundtrip(clean_db):
         assert c.post("/api/scrape/resume").json()["paused_until"] is None
         assert c.get("/api/translate/status").json()["provider"] == "ollama"
         assert c.get("/api/runs").status_code == 200
+
+
+def test_users_roles_and_activity(clean_db, monkeypatch):
+    db = clean_db
+    seed(db, n_sale=30, n_rent=10, rnd=11, post=False)
+    monkeypatch.setenv("WRO_WEB_USERS", "admin:secret1;yulia:secret2")
+    monkeypatch.delenv("WRO_WEB_PASS", raising=False)
+    with TestClient(app) as c:
+        assert c.get("/api/listings").status_code == 401                  # без входа — нельзя
+        y = {"auth": ("yulia", "secret2")}
+        a = {"auth": ("admin", "secret1")}
+        assert c.get("/api/me", **y).json() == {"user": "yulia", "role": "viewer", "users": None}
+        lid = c.get("/api/listings?per_page=1", **y).json()["items"][0]["id"]
+        assert c.get("/api/listings/%d" % lid, **y).status_code == 200
+        assert c.post("/api/listings/%d/favorite" % lid, json={}, **y).status_code == 200
+        assert c.post("/api/settings", json={"deal_threshold_pct": "5"}, **y).status_code == 403
+        assert c.get("/api/settings", **y).status_code == 403
+        assert c.post("/api/scrape", **y).status_code == 403
+        assert c.get("/api/activity", **y).status_code == 403
+        act = c.get("/api/activity?user=yulia", **a).json()
+        actions = [r["action"] for r in act["rows"]]
+        assert "view_card" in actions and "favorite" in actions and "search" in actions
+        card = [r for r in act["rows"] if r["action"] == "view_card"][0]
+        assert card["listing_id"] == lid and card["listing"]["title"]
+        assert act["per_user"]["yulia"] >= 3
+        assert c.get("/api/me", **a).json()["users"] == ["admin", "yulia"]
+        assert c.get("/api/health").status_code == 200                    # проверка живости без входа

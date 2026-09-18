@@ -212,6 +212,7 @@ class UserAction(Base):
     listing_id = Column(Integer, index=True)
     action = Column(String)                  # favorite | manual | detach | translate
     payload = Column(Text)
+    user = Column(String, index=True)        # кто правил (логин)
 
 
 class UnknownValue(Base):
@@ -223,3 +224,19 @@ class UnknownValue(Base):
     count = Column(Integer, default=1)
     last_seen = Column(DateTime, default=datetime.utcnow)
     __table_args__ = (Index("ix_unknown_field_value", "field", "value_pl", unique=True),)
+
+
+class AccessLog(Base):
+    """Кто что смотрел и делал. Нужен владельцу, чтобы видеть работу Юлии
+    (риелтор по аренде с отдельным логином): какие карточки открывала, что
+    искала, что отмечала. Сводки и опросы состояния (summary, runs, status)
+    сюда не пишутся — это шум страницы, а не действия человека."""
+    __tablename__ = "access_log"
+    id = Column(Integer, primary_key=True)
+    at = Column(DateTime, default=datetime.utcnow, index=True)
+    user = Column(String, index=True)
+    action = Column(String, index=True)      # view_card | search | favorite | note | manual | detach | translate | export | contacts | other
+    method = Column(String)
+    path = Column(String)
+    query = Column(Text)
+    listing_id = Column(Integer, index=True)

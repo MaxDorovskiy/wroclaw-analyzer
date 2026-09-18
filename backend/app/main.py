@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import random
+import re
 import secrets
 import threading
 from datetime import datetime, timedelta
@@ -31,7 +32,7 @@ from .config import (DATA_DIR, DB_PATH, FRONTEND_DIST, SAFE_KEYS, SCAN_HOUR_RENT
                      SCAN_HOURS_SALE, SCAN_JITTER_SEC, SCAN_MINUTE_RENT, SECRET_KEYS,
                      SECRET_MASK, VERSION)
 from .db import SessionLocal, ensure_columns, get_db
-from .models import Listing, PriceHistory, ScrapeRun, UnknownValue, UserAction
+from .models import AccessLog, Listing, PriceHistory, ScrapeRun, UnknownValue, UserAction
 from .settings_store import get_float, get_settings, set_setting
 from .tz import KYIV, install_json_encoder
 
@@ -52,28 +53,116 @@ log = logging.getLogger("main")
 app = FastAPI(title=u"Wrocław Analyzer", version=VERSION)
 install_json_encoder()
 
-# ---------- пароль ----------
-WEB_PASS = os.environ.get("WRO_WEB_PASS", "")
-WEB_USER = os.environ.get("WRO_WEB_USER", "admin")
-if not WEB_PASS:
-    log.warning(u"WRO_WEB_PASS не задан — сервер открыт всем, кто до него дотянется")
+# ---------- пароль, логины, роли ----------
+# WRO_WEB_USERS = "admin:пароль;yulia:пароль2" — несколько логинов; WRO_WEB_USER /
+# WRO_WEB_PASS оставлены для триггеров и совместимости (это логин администратора).
+# Администратор — WRO_WEB_USER (по умолчанию admin): ему настройки, прогоны и
+# журнал; остальным — каталог, карточки, избранное, заметки, экспорт.
+ADMIN_USER = os.environ.get("WRO_WEB_USER", "admin")
+
+
+def _users() -> Dict[str, str]:
+    users: Dict[str, str] = {}
+    for part in re.split(r"[;,]", os.environ.get("WRO_WEB_USERS", "")):
+        if ":" in part:
+            u, _, pw = part.partition(":")
+            if u.strip() and pw:
+                users[u.strip()] = pw
+    pw = os.environ.get("WRO_WEB_PASS", "")
+    if pw:
+        users.setdefault(ADMIN_USER, pw)
+    return users
+
+
+if not _users():
+    log.warning(u"WRO_WEB_PASS / WRO_WEB_USERS не заданы — сервер открыт всем, кто до него дотянется")
+
+# Что считать действием человека (в журнал), а что — шумом страницы (нет).
+_NOISE = ("/api/summary", "/api/runs", "/api/translate/status", "/api/jobs", "/api/health",
+          "/api/geo", "/api/me", "/api/settings", "/api/activity", "/api/stats",
+          "/api/price_index", "/api/trends", "/api/rent/yield_top", "/api/translate/unknown_values")
+
+
+def _classify(method: str, path: str):
+    """-> (action, listing_id) или None, если писать в журнал нечего."""
+    m = re.match(r"^/api/listings/(\d+)(?:/(\w+))?$", path)
+    if m:
+        lid = int(m.group(1))
+        sub = m.group(2)
+        if method == "GET" and not sub:
+            return "view_card", lid
+        if sub in ("favorite", "manual", "detach", "translate"):
+            return sub, lid
+        return None
+    if path == "/api/listings" and method == "GET":
+        return "search", None
+    if path.startswith("/api/export") or path.startswith("/api/contacts/export"):
+        return "export", None
+    if path.startswith("/api/contacts"):
+        return "contacts", None
+    if method == "POST" and path.startswith("/api/") and not path.startswith(_NOISE):
+        return "other", None
+    return None
+
+
+def _write_access(user: str, method: str, path: str, query: str):
+    cls = _classify(method, path)
+    if not cls:
+        return
+    db = SessionLocal()
+    try:
+        db.add(AccessLog(user=user, action=cls[0], method=method, path=path,
+                         query=query[:500] if query else None, listing_id=cls[1]))
+        db.commit()
+    except Exception as e:  # noqa: BLE001 — журнал не должен ронять запрос
+        db.rollback()
+        log.warning("журнал доступа: %s", e)
+    finally:
+        db.close()
 
 
 @app.middleware("http")
 async def _basic_auth(request: Request, call_next):
-    if WEB_PASS and request.url.path != "/api/health":
+    users = _users()
+    user = ADMIN_USER
+    if users and request.url.path != "/api/health":
         auth = request.headers.get("authorization", "")
         ok = False
         if auth.startswith("Basic "):
             try:
-                user, _, pwd = base64.b64decode(auth[6:]).decode("utf-8").partition(":")
-                ok = secrets.compare_digest(user, WEB_USER) and secrets.compare_digest(pwd, WEB_PASS)
+                u, _, pwd = base64.b64decode(auth[6:]).decode("utf-8").partition(":")
+                ok = u in users and secrets.compare_digest(pwd, users[u])
+                user = u if ok else user
             except Exception:  # noqa: BLE001
                 ok = False
         if not ok:
             return Response(u"Потрібен вхід", status_code=401,
                             headers={"WWW-Authenticate": 'Basic realm="Wroclaw Analyzer"'})
-    return await call_next(request)
+    request.state.user = user
+    response = await call_next(request)
+    if request.url.path.startswith("/api/") and response.status_code < 400:
+        _write_access(user, request.method, request.url.path, str(request.url.query or ""))
+    return response
+
+
+def current_user(request: Request) -> str:
+    return getattr(request.state, "user", ADMIN_USER)
+
+
+def is_admin(request: Request) -> bool:
+    return current_user(request) == ADMIN_USER
+
+
+def require_admin(request: Request):
+    """Настройки, прогоны, пересчёты и журнал — только администратору."""
+    if not is_admin(request):
+        raise HTTPException(403, u"лише для адміністратора")
+
+
+@app.get("/api/me")
+def api_me(request: Request):
+    return {"user": current_user(request), "role": "admin" if is_admin(request) else "viewer",
+            "users": sorted(_users()) if is_admin(request) else None}
 
 
 # ---------- сериализация ----------
@@ -349,24 +438,25 @@ def api_listing(lid: int, db: Session = Depends(get_db)):
     return full_dict(db, l)
 
 
-def _log_action(db: Session, lid: int, action: str, payload: dict):
-    db.add(UserAction(listing_id=lid, action=action, payload=json.dumps(payload, ensure_ascii=False)))
+def _log_action(db: Session, lid: int, action: str, payload: dict, request: Optional[Request] = None):
+    db.add(UserAction(listing_id=lid, action=action, payload=json.dumps(payload, ensure_ascii=False),
+                      user=current_user(request) if request is not None else None))
 
 
 @app.post("/api/listings/{lid}/favorite")
-def api_favorite(lid: int, body: Optional[dict] = None, db: Session = Depends(get_db)):
+def api_favorite(request: Request, lid: int, body: Optional[dict] = None, db: Session = Depends(get_db)):
     l = db.get(Listing, lid)
     if l is None:
         raise HTTPException(404)
     value = (body or {}).get("value")
     l.is_favorite = (not l.is_favorite) if value is None else bool(value)
-    _log_action(db, lid, "favorite", {"value": l.is_favorite})
+    _log_action(db, lid, "favorite", {"value": l.is_favorite}, request)
     db.commit()
     return {"is_favorite": l.is_favorite}
 
 
 @app.post("/api/listings/{lid}/translate")
-def api_translate_one(lid: int, db: Session = Depends(get_db)):
+def api_translate_one(request: Request, lid: int, db: Session = Depends(get_db)):
     l = db.get(Listing, lid)
     if l is None:
         raise HTTPException(404)
@@ -378,13 +468,13 @@ def api_translate_one(lid: int, db: Session = Depends(get_db)):
     except Exception as e:  # noqa: BLE001
         db.rollback()
         raise HTTPException(502, u"перекладач не відповів: %s" % e)
-    _log_action(db, lid, "translate", {"provider": res["provider"]})
+    _log_action(db, lid, "translate", {"provider": res["provider"]}, request)
     db.commit()
     return res
 
 
 @app.post("/api/listings/{lid}/manual")
-def api_manual(lid: int, body: dict, db: Session = Depends(get_db)):
+def api_manual(request: Request, lid: int, body: dict, db: Session = Depends(get_db)):
     l = db.get(Listing, lid)
     if l is None:
         raise HTTPException(404)
@@ -400,17 +490,17 @@ def api_manual(lid: int, body: dict, db: Session = Depends(get_db)):
         l.condition_override = v or None
     if "note" in body:
         l.note = body["note"] or None
-    _log_action(db, lid, "manual", body)
+    _log_action(db, lid, "manual", body, request)
     db.commit()
     return full_dict(db, l)
 
 
 @app.post("/api/listings/{lid}/detach")
-def api_detach(lid: int, db: Session = Depends(get_db)):
+def api_detach(request: Request, lid: int, db: Session = Depends(get_db)):
     g = dedup.detach(db, lid)
     if g is None:
         raise HTTPException(404)
-    _log_action(db, lid, "detach", {})
+    _log_action(db, lid, "detach", {}, request)
     db.commit()
     return {"dedup_group": g}
 
@@ -660,7 +750,7 @@ def _start_scrape(db: Session, kind: str, sources: str = "all") -> dict:
     return {"started": True, "kind": kind, "sources": sources}
 
 
-@app.post("/api/scrape")
+@app.post("/api/scrape", dependencies=[Depends(require_admin)])
 def api_scrape(kind: str = "sale", source: str = "all", db: Session = Depends(get_db)):
     if kind not in ("sale", "rent", "all"):
         raise HTTPException(400, u"kind: sale | rent | all")
@@ -676,7 +766,7 @@ def api_scrape(kind: str = "sale", source: str = "all", db: Session = Depends(ge
     return _start_scrape(db, kind, source)
 
 
-@app.post("/api/scrape/stop")
+@app.post("/api/scrape/stop", dependencies=[Depends(require_admin)])
 def api_scrape_stop():
     scraper.request_stop()
     return {"stopping": True}
@@ -690,13 +780,13 @@ def _pause_value(dt):
     return "forever" if dt.year >= 9999 else dt
 
 
-@app.post("/api/scrape/pause")
+@app.post("/api/scrape/pause", dependencies=[Depends(require_admin)])
 def api_scrape_pause(body: dict, db: Session = Depends(get_db)):
     until = scraper.set_pause(db, float(body.get("hours") or 0))
     return {"paused_until": _pause_value(until)}
 
 
-@app.post("/api/scrape/resume")
+@app.post("/api/scrape/resume", dependencies=[Depends(require_admin)])
 def api_scrape_resume(db: Session = Depends(get_db)):
     scraper.resume(db)
     return {"paused_until": None}
@@ -711,7 +801,7 @@ def _recompute_bg():
         _cache.clear()
 
 
-@app.post("/api/recompute")
+@app.post("/api/recompute", dependencies=[Depends(require_admin)])
 def api_recompute():
     _bg(_recompute_bg)
     return {"started": True}
@@ -731,7 +821,7 @@ def _translate_bg(limit: Optional[int]):
         db.close()
 
 
-@app.post("/api/translate/run")
+@app.post("/api/translate/run", dependencies=[Depends(require_admin)])
 def api_translate_run(body: Optional[dict] = None, db: Session = Depends(get_db)):
     if translate.get_provider(get_settings(db)) is None:
         raise HTTPException(400, u"провайдер перекладу не налаштований")
@@ -746,7 +836,7 @@ def api_unknown_values(db: Session = Depends(get_db)):
 
 
 # ---------- настройки ----------
-@app.get("/api/settings")
+@app.get("/api/settings", dependencies=[Depends(require_admin)])
 def api_settings(db: Session = Depends(get_db)):
     vals = get_settings(db)
     out = {}
@@ -757,7 +847,7 @@ def api_settings(db: Session = Depends(get_db)):
     return out
 
 
-@app.post("/api/settings")
+@app.post("/api/settings", dependencies=[Depends(require_admin)])
 def api_settings_save(body: dict, db: Session = Depends(get_db)):
     saved = []
     for k, v in (body or {}).items():
@@ -769,6 +859,40 @@ def api_settings_save(body: dict, db: Session = Depends(get_db)):
         saved.append(k)
     _cache.clear()
     return {"saved": saved}
+
+
+# ---------- журнал действий ----------
+ACTION_UK = {"view_card": u"відкрив(ла) картку", "search": u"шукав(ла) в каталозі",
+             "favorite": u"обране", "note": u"нотатка", "manual": u"ручна правка",
+             "detach": u"«інша квартира»", "translate": u"переклад картки",
+             "export": u"експорт", "contacts": u"контакти", "other": u"дія"}
+
+
+@app.get("/api/activity", dependencies=[Depends(require_admin)])
+def api_activity(user: Optional[str] = None, days: int = 14, limit: int = 300,
+                 action: Optional[str] = None, db: Session = Depends(get_db)):
+    """Кто что смотрел и делал — для владельца. Строки поиска расшифровываются
+    из query, карточки — заголовком объявления."""
+    q = db.query(AccessLog).filter(AccessLog.at >= datetime.utcnow() - timedelta(days=days))
+    if user:
+        q = q.filter(AccessLog.user == user)
+    if action:
+        q = q.filter(AccessLog.action == action)
+    rows = q.order_by(AccessLog.at.desc()).limit(min(limit, 2000)).all()
+    ids = {r.listing_id for r in rows if r.listing_id}
+    titles = {}
+    if ids:
+        for lid, t_uk, t_pl, os_ in db.execute(select(Listing.id, Listing.title_uk, Listing.title_pl,
+                                                       Listing.osiedle).where(Listing.id.in_(ids))).all():
+            titles[lid] = {"title": t_uk or t_pl, "osiedle": os_}
+    per_user = {}
+    for u, n in db.execute(select(AccessLog.user, func.count()).where(
+            AccessLog.at >= datetime.utcnow() - timedelta(days=days)).group_by(AccessLog.user)).all():
+        per_user[u] = n
+    return {"rows": [{"at": r.at, "user": r.user, "action": r.action, "action_uk": ACTION_UK.get(r.action, r.action),
+                      "path": r.path, "query": r.query, "listing_id": r.listing_id,
+                      "listing": titles.get(r.listing_id)} for r in rows],
+            "per_user": per_user, "days": days}
 
 
 # ---------- планировщик (только для разработки; в бою — Планировщик Windows) ----------

@@ -1,7 +1,9 @@
 # Контракт API (v1)
 
-Все ручки под basic-auth (логин `admin`, пароль `WRO_WEB_PASS`; пустой пароль =
-открыто, с предупреждением в логе). Все даты — ISO с явным смещением
+Все ручки под basic-auth. Логины: `WRO_WEB_USER`/`WRO_WEB_PASS` (администратор,
+по умолчанию `admin`) плюс `WRO_WEB_USERS="yulia:пароль;..."` (просмотр). Пусто =
+открыто, с предупреждением в логе. Пометка **[admin]** — только администратору,
+остальным 403. Все даты — ISO с явным смещением
 (`2026-09-18T10:02:00+03:00`, Киев). Деньги — целые злотые, если не сказано иное.
 
 ## Объекты
@@ -44,7 +46,9 @@
 
 | Метод и путь | Параметры | Ответ |
 |---|---|---|
-| `GET /api/health` | — | `{ok: true, db: "...", version: "1.0"}` |
+| `GET /api/health` | — | `{ok: true, db: "...", version: "1.0"}` (без входа) |
+| `GET /api/me` | — | `{user, role: "admin"\|"viewer", users: [..]\|null}` |
+| `GET /api/activity` **[admin]** | `user`, `days` (14), `limit` (300), `action` | `{rows: [{at, user, action, action_uk, path, query, listing_id, listing: {title, osiedle}\|null}], per_user: {user: n}, days}` — журнал: карточки, поиски, избранное, правки, экспорт |
 | `GET /api/summary` | — | `{sale: {active, new_24h, median_sqm, median_price, removed_7d}, rent: {active, new_24h, median_rent, median_rent_sqm}, last_runs: {sale: Run, rent: Run}, scrape_running: bool, paused_until: str|null, translate: {pending_titles, pending_descriptions, done_total, provider, model}, fx: {USD: 4.0, EUR: 4.3, date: "2026-09-18"}, sources: [{source, active, last_seen}]}` |
 | `GET /api/listings` | `offer_type` (sale\|rent, по умолчанию sale), `rooms` (через запятую), `price_min/max`, `area_min/max`, `sqm_min/max`, `district` (через запятую), `osiedle` (через запятую), `market`, `condition` (через запятую), `source`, `seller_type`, `build_year_min/max`, `floor_min/max`, `only_deals` (1 = discount_pct ≥ deal_threshold), `discount_min`, `yield_min`, `favorites` (1), `active` (1 по умолчанию, 0 = все), `dupes` (1 = показывать все размещения, по умолчанию только представителей), `q` (поиск по заголовку/улице), `sort` (discount\|price\|price_sqm\|posted\|first_seen\|area\|yield\|price_drop), `order` (asc\|desc), `page`, `per_page` (≤ 200) | `{total, page, per_page, items: [ListingRow]}` |
 | `GET /api/listings/{id}` | — | ListingFull |
@@ -58,16 +62,16 @@
 | `GET /api/trends` | `weeks` (26), `offer_type` | `{points: [{week, new, removed, median_sqm, active}]}` |
 | `GET /api/rent/yield_top` | `level` (osiedle\|district), `rooms`, `min_rent` (8), `min_sale` (8) | `{rows: [{name, name_uk, rooms, rent_median_pln, rent_sqm, sale_median_sqm, yield_pct, n_rent, n_sale}]}` |
 | `GET /api/runs` | `limit` (50) | `[Run]`, Run = `{id, kind, source, status, started_at, finished_at, last_beat, pages, seen, new, updated, removed, errors, message}` |
-| `POST /api/scrape` | `kind` (sale\|rent\|all), `source` (otodom\|olx\|all) | `{started: true, run_id}`; 409 если идёт прогон или пауза |
-| `POST /api/scrape/stop` | — | `{stopping: true}` |
-| `POST /api/scrape/pause` | `{hours}` (0 = до отмены) | `{paused_until}` |
-| `POST /api/scrape/resume` | — | `{paused_until: null}` |
+| `POST /api/scrape` **[admin]** | `kind` (sale\|rent\|all), `source` (otodom\|olx\|all) | `{started: true, run_id}`; 409 если идёт прогон или пауза |
+| `POST /api/scrape/stop` **[admin]** | — | `{stopping: true}` |
+| `POST /api/scrape/pause` **[admin]** | `{hours}` (0 = до отмены) | `{paused_until}` |
+| `POST /api/scrape/resume` **[admin]** | — | `{paused_until: null}` |
 | `GET /api/translate/status` | — | `{provider, model, pending_titles, pending_descriptions, done_total, done_today, last_error, running}` |
-| `POST /api/translate/run` | `{limit}` | `{started: true}` — фоновая обработка очереди |
+| `POST /api/translate/run` **[admin]** | `{limit}` | `{started: true}` — фоновая обработка очереди |
 | `GET /api/translate/unknown_values` | — | `[{field, value_pl, count}]` — что не нашлось в словаре |
-| `POST /api/recompute` | — | `{started: true}` — дубли + выгодность + доходность в фоне |
-| `GET /api/settings` | — | `{key: value}`; секреты замаскированы `••••••••` |
-| `POST /api/settings` | `{key: value, ...}` — только ключи из `SAFE_KEYS` | `{saved: [keys]}` |
+| `POST /api/recompute` **[admin]** | — | `{started: true}` — дубли + выгодность + доходность в фоне |
+| `GET /api/settings` **[admin]** | — | `{key: value}`; секреты замаскированы `••••••••` |
+| `POST /api/settings` **[admin]** | `{key: value, ...}` — только ключи из `SAFE_KEYS` | `{saved: [keys]}` |
 | `GET /api/jobs` | — | `{scheduler_running, disabled_by_env, jobs: [{id, next_run}]}` |
 | `GET /api/export` | те же фильтры, что у `/api/listings`, + `format` (csv\|xlsx) | файл |
 
