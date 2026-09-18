@@ -1,0 +1,29 @@
+{"props": {"pageProps": {"data": {"searchAds": {
+  "items": [
+    {"id": 65432101, "title": "Słoneczne 3 pokoje z balkonem, Gaj", "slug": "sloneczne-3-pokoje-z-balkonem-gaj-ID4v4VB",
+     "estate": "FLAT", "transaction": "SELL",
+     "location": {"address": {"street": {"name": "ul. Świeradowska", "number": null}, "city": {"name": "Wrocław"},
+                              "district": {"name": "Krzyki", "code": "krzyki"}, "province": {"name": "dolnośląskie"}},
+                  "reverseGeocoding": {"locations": [
+                     {"id": "dolnoslaskie", "fullName": "dolnośląskie", "locationLevel": "REGION"},
+                     {"id": "wroclaw", "fullName": "Wrocław", "locationLevel": "CITY"},
+                     {"id": "krzyki", "fullName": "Wrocław, Krzyki", "locationLevel": "DISTRICT"},
+                     {"id": "gaj", "fullName": "Wrocław, Krzyki, Gaj", "locationLevel": "SUBDISTRICT"}]}},
+     "totalPrice": {"value": 780000, "currency": "PLN"}, "pricePerSquareMeter": {"value": 13000, "currency": "PLN"},
+     "rentPrice": null, "areaInSquareMeters": 60, "roomsNumber": "THREE", "floorNumber": "FLOOR_2",
+     "images": [{"medium": "https://ireland.apollo.olxcdn.com/v1/files/abc123/image;s=655x491",
+                 "large": "https://ireland.apollo.olxcdn.com/v1/files/abc123/image;s=1280x1024"}],
+     "isPrivateOwner": false, "agency": {"id": 123, "name": "Nieruchomości XYZ", "type": "AGENCY"},
+     "dateCreated": "2026-09-10 12:34:56", "dateCreatedFirst": "2026-09-10 12:34:56", "pushedUpAt": null,
+     "hidePrice": false, "investmentState": null, "totalPossibleImages": 14},
+    {"id": 65432102, "title": "Nowe mieszkanie od dewelopera, stan deweloperski, Jagodno", "slug": "nowe-mieszkanie-jagodno-ID4x9SV",
+     "estate": "FLAT", "transaction": "SELL",
+     "location": {"address": {"street": null, "city": {"name": "Wrocław"}, "district": {"name": "Jagodno"}, "province": {"name": "dolnośląskie"}},
+                  "reverseGeocoding": {"locations": [{"fullName": "Wrocław", "locationLevel": "CITY"}, {"fullName": "Wrocław, Krzyki, Jagodno", "locationLevel": "SUBDISTRICT"}]}},
+     "totalPrice": {"value": 620000, "currency": "PLN"}, "pricePerSquareMeter": {"value": 11923, "currency": "PLN"},
+     "areaInSquareMeters": 52, "roomsNumber": "TWO", "floorNumber": "GROUND",
+     "images": [], "isPrivateOwner": false, "agency": {"id": 77, "name": "Deweloper ABC", "type": "DEVELOPER"},
+     "dateCreated": "2026-09-11 08:00:00", "dateCreatedFirst": "2026-09-11 08:00:00", "hidePrice": false, "totalPossibleImages": 3}
+  ],
+  "pagination": {"totalPages": 3, "totalResults": 180, "itemsPerPage": 72, "currentPage": 1}
+}}}}}

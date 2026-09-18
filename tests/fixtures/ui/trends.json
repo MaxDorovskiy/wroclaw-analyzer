@@ -1,0 +1,186 @@
+{
+  "points": [
+    {
+      "week": "2026-03-23",
+      "new": 130,
+      "removed": 110,
+      "median_sqm": 13020,
+      "active": 5420
+    },
+    {
+      "week": "2026-03-30",
+      "new": 142,
+      "removed": 121,
+      "median_sqm": 13060,
+      "active": 5441
+    },
+    {
+      "week": "2026-04-06",
+      "new": 151,
+      "removed": 133,
+      "median_sqm": 13100,
+      "active": 5459
+    },
+    {
+      "week": "2026-04-13",
+      "new": 138,
+      "removed": 129,
+      "median_sqm": 13180,
+      "active": 5468
+    },
+    {
+      "week": "2026-04-20",
+      "new": 160,
+      "removed": 141,
+      "median_sqm": 13210,
+      "active": 5487
+    },
+    {
+      "week": "2026-04-27",
+      "new": 172,
+      "removed": 150,
+      "median_sqm": 13290,
+      "active": 5509
+    },
+    {
+      "week": "2026-05-04",
+      "new": 149,
+      "removed": 138,
+      "median_sqm": 13300,
+      "active": 5520
+    },
+    {
+      "week": "2026-05-11",
+      "new": 155,
+      "removed": 147,
+      "median_sqm": 13360,
+      "active": 5528
+    },
+    {
+      "week": "2026-05-18",
+      "new": 168,
+      "removed": 152,
+      "median_sqm": 13420,
+      "active": 5544
+    },
+    {
+      "week": "2026-05-25",
+      "new": 181,
+      "removed": 160,
+      "median_sqm": 13390,
+      "active": 5565
+    },
+    {
+      "week": "2026-06-01",
+      "new": 176,
+      "removed": 158,
+      "median_sqm": 13450,
+      "active": 5583
+    },
+    {
+      "week": "2026-06-08",
+      "new": 190,
+      "removed": 171,
+      "median_sqm": 13500,
+      "active": 5602
+    },
+    {
+      "week": "2026-06-15",
+      "new": 203,
+      "removed": 180,
+      "median_sqm": 13580,
+      "active": 5625
+    },
+    {
+      "week": "2026-06-22",
+      "new": 188,
+      "removed": 169,
+      "median_sqm": 13610,
+      "active": 5644
+    },
+    {
+      "week": "2026-06-29",
+      "new": 171,
+      "removed": 175,
+      "median_sqm": 13640,
+      "active": 5640
+    },
+    {
+      "week": "2026-07-06",
+      "new": 195,
+      "removed": 182,
+      "median_sqm": 13700,
+      "active": 5653
+    },
+    {
+      "week": "2026-07-13",
+      "new": 210,
+      "removed": 188,
+      "median_sqm": 13690,
+      "active": 5675
+    },
+    {
+      "week": "2026-07-20",
+      "new": 199,
+      "removed": 179,
+      "median_sqm": 13750,
+      "active": 5695
+    },
+    {
+      "week": "2026-07-27",
+      "new": 184,
+      "removed": 171,
+      "median_sqm": 13780,
+      "active": 5708
+    },
+    {
+      "week": "2026-08-03",
+      "new": 176,
+      "removed": 168,
+      "median_sqm": 13800,
+      "active": 5716
+    },
+    {
+      "week": "2026-08-10",
+      "new": 168,
+      "removed": 160,
+      "median_sqm": 13790,
+      "active": 5724
+    },
+    {
+      "week": "2026-08-17",
+      "new": 191,
+      "removed": 177,
+      "median_sqm": 13830,
+      "active": 5738
+    },
+    {
+      "week": "2026-08-24",
+      "new": 205,
+      "removed": 190,
+      "median_sqm": 13850,
+      "active": 5753
+    },
+    {
+      "week": "2026-08-31",
+      "new": 212,
+      "removed": 196,
+      "median_sqm": 13870,
+      "active": 5769
+    },
+    {
+      "week": "2026-09-07",
+      "new": 198,
+      "removed": 185,
+      "median_sqm": 13840,
+      "active": 5782
+    },
+    {
+      "week": "2026-09-14",
+      "new": 187,
+      "removed": 173,
+      "median_sqm": 13850,
+      "active": 5796
+    }
+  ]
+}

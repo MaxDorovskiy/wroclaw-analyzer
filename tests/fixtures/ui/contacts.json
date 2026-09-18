@@ -1,0 +1,70 @@
+{
+  "total": 3,
+  "page": 1,
+  "per_page": 50,
+  "items": [
+    {
+      "seller_key": "olx:user:77120",
+      "seller_name": "Marek",
+      "seller_type": "private",
+      "seller_type_uk": "власник",
+      "seller_phone": "+48 512 987 654",
+      "source": "olx",
+      "listings_sale": 1,
+      "listings_rent": 2,
+      "active_total": 3,
+      "first_seen": "2026-08-30T11:40:00+03:00",
+      "last_seen": "2026-09-18T12:01:00+03:00",
+      "osiedla": [
+        "Huby",
+        "Gaj"
+      ],
+      "sample_ids": [
+        102,
+        202
+      ]
+    },
+    {
+      "seller_key": "otodom:user:3391",
+      "seller_name": "Anna",
+      "seller_type": "private",
+      "seller_type_uk": "власник",
+      "seller_phone": "+48 600 111 222",
+      "source": "otodom",
+      "listings_sale": 0,
+      "listings_rent": 1,
+      "active_total": 1,
+      "first_seen": "2026-09-15T02:40:00+03:00",
+      "last_seen": "2026-09-18T03:01:00+03:00",
+      "osiedla": [
+        "Plac Grunwaldzki"
+      ],
+      "sample_ids": [
+        201
+      ]
+    },
+    {
+      "seller_key": "otodom:agency:8841",
+      "seller_name": "Nieruchomości XYZ",
+      "seller_type": "agency",
+      "seller_type_uk": "агенція",
+      "seller_phone": null,
+      "source": "otodom",
+      "listings_sale": 38,
+      "listings_rent": 12,
+      "active_total": 50,
+      "first_seen": "2026-06-02T11:10:00+03:00",
+      "last_seen": "2026-09-18T12:03:00+03:00",
+      "osiedla": [
+        "Gaj",
+        "Krzyki-Partynice",
+        "Jagodno",
+        "Tarnogaj"
+      ],
+      "sample_ids": [
+        101,
+        104
+      ]
+    }
+  ]
+}

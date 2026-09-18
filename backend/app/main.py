@@ -1,0 +1,832 @@
+# -*- coding: utf-8 -*-
+"""API и раздача фронтенда. Контракт — docs/API.md.
+
+Сервер закрыт паролем (WRO_WEB_PASS) мидлваром — накрывает всё, включая
+статику. Пустой пароль = открыт всем, об этом предупреждение в логе при старте
+(так работает только превью на копии базы).
+"""
+import base64
+import csv
+import io
+import json
+import logging
+import os
+import random
+import secrets
+import threading
+from datetime import datetime, timedelta
+from logging.handlers import RotatingFileHandler
+from typing import Dict, List, Optional
+
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import func, or_, select, text
+from sqlalchemy.orm import Session
+
+from . import analytics, dedup, fx, geo, i18n, rent_analytics, scraper, translate
+from .config import (DATA_DIR, DB_PATH, FRONTEND_DIST, SAFE_KEYS, SCAN_HOUR_RENT,
+                     SCAN_HOURS_SALE, SCAN_JITTER_SEC, SCAN_MINUTE_RENT, SECRET_KEYS,
+                     SECRET_MASK, VERSION)
+from .db import SessionLocal, ensure_columns, get_db
+from .models import Listing, PriceHistory, ScrapeRun, UnknownValue, UserAction
+from .settings_store import get_float, get_settings, set_setting
+from .tz import KYIV, install_json_encoder
+
+# ---------- логи ----------
+# Под uvicorn basicConfig ничего не делает — ставим уровень и файл явно.
+# Ротацию делает сам Python: на Windows нет launchd со StandardOutPath.
+_root = logging.getLogger()
+_root.setLevel(logging.INFO)
+if not any(isinstance(h, RotatingFileHandler) for h in _root.handlers):
+    _fh = RotatingFileHandler(str(DATA_DIR / "server.log"), maxBytes=20 * 1024 * 1024,
+                              backupCount=3, encoding="utf-8")
+    _fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    _root.addHandler(_fh)
+logging.getLogger("httpx").setLevel(logging.WARNING)   # его INFO — половина лога
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+log = logging.getLogger("main")
+
+app = FastAPI(title=u"Wrocław Analyzer", version=VERSION)
+install_json_encoder()
+
+# ---------- пароль ----------
+WEB_PASS = os.environ.get("WRO_WEB_PASS", "")
+WEB_USER = os.environ.get("WRO_WEB_USER", "admin")
+if not WEB_PASS:
+    log.warning(u"WRO_WEB_PASS не задан — сервер открыт всем, кто до него дотянется")
+
+
+@app.middleware("http")
+async def _basic_auth(request: Request, call_next):
+    if WEB_PASS and request.url.path != "/api/health":
+        auth = request.headers.get("authorization", "")
+        ok = False
+        if auth.startswith("Basic "):
+            try:
+                user, _, pwd = base64.b64decode(auth[6:]).decode("utf-8").partition(":")
+                ok = secrets.compare_digest(user, WEB_USER) and secrets.compare_digest(pwd, WEB_PASS)
+            except Exception:  # noqa: BLE001
+                ok = False
+        if not ok:
+            return Response(u"Потрібен вхід", status_code=401,
+                            headers={"WWW-Authenticate": 'Basic realm="Wroclaw Analyzer"'})
+    return await call_next(request)
+
+
+# ---------- сериализация ----------
+def _images(l: Listing, n: int = 3) -> List[str]:
+    try:
+        return (json.loads(l.images_json or "[]") or [])[:n]
+    except ValueError:
+        return []
+
+
+def seller_key(l: Listing) -> Optional[str]:
+    if l.seller_id:
+        return l.seller_id
+    if l.seller_phone:
+        return "phone:" + l.seller_phone
+    if l.seller_name:
+        return "name:" + l.seller_name.strip().lower()
+    return None
+
+
+def row_dict(l: Listing, ph: Optional[dict] = None) -> Dict:
+    cond = l.condition_override or l.condition or "unknown"
+    osiedle = l.osiedle_override or l.osiedle
+    district = geo.district_of(osiedle) or l.district
+    start = l.posted_at or l.first_seen
+    d = {
+        "id": l.id, "source": l.source, "source_id": l.source_id, "url": l.url,
+        "offer_type": l.offer_type, "external_url": l.external_url,
+        "title_pl": l.title_pl, "title_uk": l.title_uk,
+        "price_pln": l.price_pln, "price_usd": l.price_usd, "price_eur": l.price_eur,
+        "price_per_m2": l.price_per_m2, "czynsz_pln": l.czynsz_pln, "hide_price": l.hide_price,
+        "area": l.area, "rooms": l.rooms, "floor": l.floor, "floor_uk": i18n.floor_uk(l.floor),
+        "floors_total": l.floors_total, "build_year": l.build_year,
+        "market": l.market, "market_uk": i18n.uk("market", l.market),
+        "building_type": l.building_type, "building_type_uk": i18n.uk("building_type", l.building_type),
+        "condition": cond, "condition_uk": i18n.uk("condition", cond),
+        "condition_src": "manual" if l.condition_override else l.condition_src,
+        "district": district, "district_uk": geo.district_uk(district),
+        "osiedle": osiedle, "osiedle_uk": geo.osiedle_uk(osiedle),
+        "osiedle_src": "manual" if l.osiedle_override else "auto",
+        "street": l.street, "lat": l.lat, "lon": l.lon,
+        "seller_type": l.seller_type, "seller_type_uk": i18n.uk("seller_type", l.seller_type),
+        "seller_name": l.seller_name, "seller_phone": l.seller_phone, "seller_id": l.seller_id,
+        "seller_key": seller_key(l), "no_commission": l.no_commission,
+        "images": _images(l), "image_count": l.image_count,
+        "posted_at": l.posted_at, "first_seen": l.first_seen, "last_seen": l.last_seen,
+        "is_active": l.is_active, "removed_at": l.removed_at,
+        "days_on_market": (datetime.utcnow() - start).days if start else None,
+        "dedup_group": l.dedup_group, "group_size": l.group_size, "is_representative": l.is_representative,
+        "discount_pct": l.discount_pct, "baseline_sqm": l.baseline_sqm,
+        "baseline_level": l.baseline_level, "baseline_level_uk": i18n.LEVELS.get(l.baseline_level or "", ("", ""))[1],
+        "baseline_count": l.baseline_count, "deal_thin_base": l.deal_thin_base,
+        "yield_pct": l.yield_pct, "rent_median_pln": l.rent_median_pln,
+        "rent_baseline_level": l.rent_baseline_level, "rent_baseline_count": l.rent_baseline_count,
+        "price_changes": (ph or {}).get("changes", 0), "price_drop_pct": (ph or {}).get("drop_pct"),
+        "is_favorite": bool(l.is_favorite), "translated": bool(l.title_uk),
+        "furnished": l.furnished, "elevator": l.elevator,
+    }
+    return d
+
+
+def _price_stats(db: Session, ids: List[int]) -> Dict[int, dict]:
+    """Число смен цены и % от первой цены — одним запросом на страницу."""
+    if not ids:
+        return {}
+    rows = db.execute(select(PriceHistory.listing_id, PriceHistory.price_pln, PriceHistory.seen_at)
+                      .where(PriceHistory.listing_id.in_(ids)).order_by(PriceHistory.seen_at)).all()
+    out: Dict[int, dict] = {}
+    first: Dict[int, float] = {}
+    for lid, price, _ in rows:
+        o = out.setdefault(lid, {"changes": -1, "drop_pct": None})
+        o["changes"] += 1
+        first.setdefault(lid, price)
+        if first[lid] and price:
+            o["drop_pct"] = round((price - first[lid]) / first[lid] * 100, 1)
+    for o in out.values():
+        o["changes"] = max(0, o["changes"])
+        if o["changes"] == 0:
+            o["drop_pct"] = None
+    return out
+
+
+def _characteristics(l: Listing) -> List[dict]:
+    try:
+        chars = json.loads(l.characteristics_json or "{}") or {}
+    except ValueError:
+        chars = {}
+    field_of = {"market": "market", "building_type": "building_type", "builttype": "building_type",
+                "building_material": "building_material", "construction_status": "construction_status",
+                "windows_type": "windows", "heating": "heating", "building_ownership": "ownership",
+                "extras_types": "extras", "security_types": "extras", "media_types": "extras",
+                "equipment_types": "extras"}
+    out = []
+    for key, c in chars.items():
+        if not isinstance(c, dict):
+            continue
+        label_pl, label_uk = i18n.label_pair(key)
+        if c.get("label"):
+            label_pl = c["label"]
+        value_pl = c.get("localized") or c.get("value")
+        value_uk = None
+        fld = field_of.get(key)
+        raw_val = c.get("value")
+        if fld == "extras" and raw_val:
+            from .normalize import canon_extra
+            parts = raw_val if isinstance(raw_val, list) else str(raw_val).replace("::", ",").split(",")
+            uks = [i18n.uk("extras", canon_extra(p)) or p for p in parts if p]
+            value_uk = u", ".join(uks)
+        elif fld:
+            from .normalize import _map, _BUILDING, _MATERIAL, _STATUS, _OWNERSHIP, _HEATING, _WINDOWS
+            table = {"building_type": _BUILDING, "building_material": _MATERIAL,
+                     "construction_status": _STATUS, "ownership": _OWNERSHIP,
+                     "heating": _HEATING, "windows": _WINDOWS}.get(fld)
+            canon = _map(table, raw_val) if table else None
+            if fld == "market":
+                from .normalize import parse_market
+                canon = parse_market(raw_val)
+            value_uk = i18n.uk(fld, canon)
+        elif key in ("floor_no", "floor_select"):
+            from .normalize import parse_floor
+            value_uk = i18n.floor_uk(parse_floor(raw_val))
+        elif raw_val is not None and str(raw_val).lower() in i18n.YES_NO:
+            value_uk = i18n.YES_NO[str(raw_val).lower()][1]
+        out.append({"key": key, "label_pl": label_pl, "label_uk": label_uk,
+                    "value_pl": value_pl if value_pl is not None else "", "value_uk": value_uk})
+    return out
+
+
+def full_dict(db: Session, l: Listing) -> Dict:
+    d = row_dict(l, _price_stats(db, [l.id]).get(l.id))
+    d.update({
+        "description_pl": l.description_pl, "description_uk": l.description_uk,
+        "translated_at": l.translated_at, "translate_provider": l.translate_provider,
+        "characteristics": _characteristics(l),
+        "images": _images(l, 40),
+        "price_history": [{"price_pln": p, "seen_at": at} for p, at in db.execute(
+            select(PriceHistory.price_pln, PriceHistory.seen_at).where(PriceHistory.listing_id == l.id)
+            .order_by(PriceHistory.seen_at)).all()],
+        "note": l.note, "raw_available": bool(l.raw_json), "details_fetched": l.details_fetched,
+        "extras": json.loads(l.extras_json or "[]"), "media": json.loads(l.media_json or "[]"),
+        "security": json.loads(l.security_json or "[]"),
+        "heating": l.heating, "heating_uk": i18n.uk("heating", l.heating),
+        "windows": l.windows, "windows_uk": i18n.uk("windows", l.windows),
+        "ownership": l.ownership, "ownership_uk": i18n.uk("ownership", l.ownership),
+        "building_material": l.building_material, "building_material_uk": i18n.uk("building_material", l.building_material),
+        "construction_status": l.construction_status, "construction_status_uk": i18n.uk("construction_status", l.construction_status),
+        "address_raw": l.address_raw, "location_raw": l.location_raw,
+    })
+    d["extras_uk"] = [i18n.uk("extras", x) or x for x in d["extras"]]
+    dupes = db.query(Listing).filter(Listing.dedup_group == l.dedup_group, Listing.id != l.id).all() \
+        if l.dedup_group else []
+    d["dupes"] = [{"id": x.id, "source": x.source, "url": x.url, "price_pln": x.price_pln,
+                   "seller_type": x.seller_type, "seller_type_uk": i18n.uk("seller_type", x.seller_type),
+                   "seller_name": x.seller_name, "first_seen": x.first_seen, "is_active": x.is_active,
+                   "rooms": x.rooms, "area": x.area, "floor": x.floor} for x in dupes]
+    coef = {}
+    try:
+        coef = json.loads(get_settings(db).get("area_coef_sale") or "{}")
+    except ValueError:
+        pass
+    band_lbl = analytics.band_label(analytics.band(l.area))
+    d["deal_explain"] = None if l.discount_pct is None else {
+        "level": l.baseline_level, "level_uk": i18n.LEVELS.get(l.baseline_level or "", ("", ""))[1],
+        "key": json.loads(l.baseline_key) if l.baseline_key else None,
+        "pool_size": l.baseline_count, "median_sqm": l.baseline_sqm,
+        "price_sqm_adj": l.price_sqm_adj, "band": band_lbl, "area_coef": coef.get(band_lbl),
+        "thin": l.deal_thin_base, "discount_pct": l.discount_pct,
+    }
+    d["rent_explain"] = rent_analytics.rent_explain(db, l)
+    if d["rent_explain"]:
+        d["rent_explain"]["level_uk"] = i18n.LEVELS.get(l.rent_baseline_level or "", ("", ""))[1]
+    return d
+
+
+# ---------- фильтры каталога ----------
+def _csv(v: Optional[str]) -> List[str]:
+    return [x.strip() for x in (v or "").split(",") if x.strip()]
+
+
+def _apply_filters(q, p: dict):
+    offer_type = p.get("offer_type") or "sale"
+    q = q.filter(Listing.offer_type == offer_type)
+    if str(p.get("active", "1")) != "0":
+        q = q.filter(Listing.is_active.is_(True))
+    if str(p.get("dupes", "0")) != "1":
+        q = q.filter(Listing.is_representative.is_(True))
+    rooms = [int(x) for x in _csv(p.get("rooms")) if x.isdigit()]
+    if rooms:
+        conds = [Listing.rooms == r for r in rooms if r < 4]
+        if any(r >= 4 for r in rooms):
+            conds.append(Listing.rooms >= 4)
+        q = q.filter(or_(*conds))
+    for key, col in (("price_min", Listing.price_pln), ("area_min", Listing.area),
+                     ("sqm_min", Listing.price_per_m2), ("build_year_min", Listing.build_year),
+                     ("floor_min", Listing.floor), ("discount_min", Listing.discount_pct),
+                     ("yield_min", Listing.yield_pct)):
+        if p.get(key) not in (None, ""):
+            q = q.filter(col >= float(p[key]))
+    for key, col in (("price_max", Listing.price_pln), ("area_max", Listing.area),
+                     ("sqm_max", Listing.price_per_m2), ("build_year_max", Listing.build_year),
+                     ("floor_max", Listing.floor)):
+        if p.get(key) not in (None, ""):
+            q = q.filter(col <= float(p[key]))
+    if _csv(p.get("district")):
+        q = q.filter(Listing.district.in_(_csv(p["district"])))
+    if _csv(p.get("osiedle")):
+        vals = _csv(p["osiedle"])
+        q = q.filter(or_(Listing.osiedle_override.in_(vals),
+                         (Listing.osiedle_override.is_(None)) & (Listing.osiedle.in_(vals))))
+    if p.get("market"):
+        q = q.filter(Listing.market == p["market"])
+    if _csv(p.get("condition")):
+        vals = _csv(p["condition"])
+        q = q.filter(or_(Listing.condition_override.in_(vals),
+                         (Listing.condition_override.is_(None)) & (Listing.condition.in_(vals))))
+    if p.get("source"):
+        q = q.filter(Listing.source == p["source"])
+    if p.get("seller_type"):
+        q = q.filter(Listing.seller_type == p["seller_type"])
+    if str(p.get("has_phone", "0")) == "1":
+        q = q.filter(Listing.seller_phone.isnot(None))
+    if p.get("seller_key"):
+        sk = p["seller_key"]
+        if sk.startswith("phone:"):
+            q = q.filter(Listing.seller_phone == sk[6:])
+        elif sk.startswith("name:"):
+            q = q.filter(func.lower(Listing.seller_name) == sk[5:])
+        else:
+            q = q.filter(Listing.seller_id == sk)
+    if p.get("first_seen_days") not in (None, ""):
+        q = q.filter(Listing.first_seen >= datetime.utcnow() - timedelta(days=float(p["first_seen_days"])))
+    if str(p.get("only_deals", "0")) == "1":
+        q = q.filter(Listing.discount_pct >= p.get("_deal_threshold", 10.0))
+    if str(p.get("favorites", "0")) == "1":
+        q = q.filter(Listing.is_favorite.is_(True))
+    if p.get("q"):
+        like = u"%%%s%%" % p["q"].strip()
+        q = q.filter(or_(Listing.title_pl.ilike(like), Listing.title_uk.ilike(like),
+                         Listing.street.ilike(like), Listing.seller_name.ilike(like),
+                         Listing.source_id == p["q"].strip()))
+    return q
+
+
+SORTS = {
+    "discount": Listing.discount_pct, "price": Listing.price_pln, "price_sqm": Listing.price_per_m2,
+    "posted": Listing.posted_at, "first_seen": Listing.first_seen, "area": Listing.area,
+    "yield": Listing.yield_pct, "price_drop": Listing.discount_pct, "last_seen": Listing.last_seen,
+}
+
+
+@app.get("/api/listings")
+def api_listings(request: Request, db: Session = Depends(get_db)):
+    p = dict(request.query_params)
+    p["_deal_threshold"] = get_float(db, "deal_threshold_pct", 10.0)
+    q = _apply_filters(db.query(Listing), p)
+    total = q.count()
+    sort = SORTS.get(p.get("sort") or "first_seen", Listing.first_seen)
+    order = (p.get("order") or ("asc" if p.get("sort") in ("price", "price_sqm") else "desc")).lower()
+    q = q.order_by(sort.asc().nullslast() if order == "asc" else sort.desc().nullslast(), Listing.id.desc())
+    page = max(1, int(p.get("page") or 1))
+    per_page = min(200, max(1, int(p.get("per_page") or 50)))
+    rows = q.offset((page - 1) * per_page).limit(per_page).all()
+    ph = _price_stats(db, [r.id for r in rows])
+    return {"total": total, "page": page, "per_page": per_page,
+            "items": [row_dict(r, ph.get(r.id)) for r in rows]}
+
+
+@app.get("/api/listings/{lid}")
+def api_listing(lid: int, db: Session = Depends(get_db)):
+    l = db.get(Listing, lid)
+    if l is None:
+        raise HTTPException(404, u"оголошення не знайдено")
+    return full_dict(db, l)
+
+
+def _log_action(db: Session, lid: int, action: str, payload: dict):
+    db.add(UserAction(listing_id=lid, action=action, payload=json.dumps(payload, ensure_ascii=False)))
+
+
+@app.post("/api/listings/{lid}/favorite")
+def api_favorite(lid: int, body: Optional[dict] = None, db: Session = Depends(get_db)):
+    l = db.get(Listing, lid)
+    if l is None:
+        raise HTTPException(404)
+    value = (body or {}).get("value")
+    l.is_favorite = (not l.is_favorite) if value is None else bool(value)
+    _log_action(db, lid, "favorite", {"value": l.is_favorite})
+    db.commit()
+    return {"is_favorite": l.is_favorite}
+
+
+@app.post("/api/listings/{lid}/translate")
+def api_translate_one(lid: int, db: Session = Depends(get_db)):
+    l = db.get(Listing, lid)
+    if l is None:
+        raise HTTPException(404)
+    provider = translate.get_provider(get_settings(db))
+    if provider is None:
+        raise HTTPException(400, u"провайдер перекладу не налаштований (Налаштування)")
+    try:
+        res = translate.translate_listing(db, l, provider, force=not l.description_uk)
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        raise HTTPException(502, u"перекладач не відповів: %s" % e)
+    _log_action(db, lid, "translate", {"provider": res["provider"]})
+    db.commit()
+    return res
+
+
+@app.post("/api/listings/{lid}/manual")
+def api_manual(lid: int, body: dict, db: Session = Depends(get_db)):
+    l = db.get(Listing, lid)
+    if l is None:
+        raise HTTPException(404)
+    if "osiedle" in body:
+        v = body["osiedle"]
+        if v and not geo.match_osiedle(v):
+            raise HTTPException(400, u"невідоме осиедле: %s" % v)
+        l.osiedle_override = geo.match_osiedle(v) if v else None
+    if "condition" in body:
+        v = body["condition"]
+        if v and v not in i18n.CONDITION:
+            raise HTTPException(400, u"невідомий стан: %s" % v)
+        l.condition_override = v or None
+    if "note" in body:
+        l.note = body["note"] or None
+    _log_action(db, lid, "manual", body)
+    db.commit()
+    return full_dict(db, l)
+
+
+@app.post("/api/listings/{lid}/detach")
+def api_detach(lid: int, db: Session = Depends(get_db)):
+    g = dedup.detach(db, lid)
+    if g is None:
+        raise HTTPException(404)
+    _log_action(db, lid, "detach", {})
+    db.commit()
+    return {"dedup_group": g}
+
+
+# ---------- справочники и сводка ----------
+@app.get("/api/health")
+def api_health():
+    return {"ok": True, "db": str(DB_PATH), "version": VERSION}
+
+
+@app.get("/api/geo")
+def api_geo(db: Session = Depends(get_db)):
+    counts = {}
+    for offer_type, osiedle, n in db.execute(
+            select(Listing.offer_type, func.coalesce(Listing.osiedle_override, Listing.osiedle), func.count())
+            .where(Listing.is_active.is_(True), Listing.is_representative.is_(True))
+            .group_by(Listing.offer_type, func.coalesce(Listing.osiedle_override, Listing.osiedle))).all():
+        counts[(offer_type, osiedle)] = n
+    out = geo.all_geo()
+    for d in out:
+        for o in d["osiedla"]:
+            o["sale_active"] = counts.get(("sale", o["name"]), 0)
+            o["rent_active"] = counts.get(("rent", o["name"]), 0)
+        d["sale_active"] = sum(o["sale_active"] for o in d["osiedla"])
+        d["rent_active"] = sum(o["rent_active"] for o in d["osiedla"])
+    return {"districts": out}
+
+
+def _run_dict(r: Optional[ScrapeRun]) -> Optional[dict]:
+    if r is None:
+        return None
+    return {"id": r.id, "kind": r.kind, "source": r.source, "status": r.status, "phase": r.phase,
+            "started_at": r.started_at, "finished_at": r.finished_at, "last_beat": r.last_beat,
+            "pages": r.pages, "seen": r.seen, "new": r.new, "updated": r.updated,
+            "price_changes": r.price_changes, "removed": r.removed, "details": r.details,
+            "errors": r.errors, "message": r.message, "full": r.full}
+
+
+_cache: Dict[str, tuple] = {}
+
+
+def _cached(key: str, build, ttl: int = 300):
+    """Тяжёлые срезы считаются секунды, а страница зовёт их при каждом
+    открытии — держим 5 минут."""
+    now = datetime.utcnow()
+    hit = _cache.get(key)
+    if hit and (now - hit[0]).total_seconds() < ttl:
+        return hit[1]
+    val = build()
+    _cache[key] = (now, val)
+    return val
+
+
+@app.get("/api/summary")
+def api_summary(db: Session = Depends(get_db)):
+    paused = scraper.paused_until(db)
+    sources = [{"source": s, "active": n, "last_seen": ls} for s, n, ls in db.execute(
+        select(Listing.source, func.count(), func.max(Listing.last_seen))
+        .where(Listing.is_active.is_(True)).group_by(Listing.source)).all()]
+    out = _cached("summary", lambda: analytics.market_summary(db), 120)
+    return dict(out, **{
+        "last_runs": {"sale": _run_dict(scraper.last_run(db, "sale")),
+                      "rent": _run_dict(scraper.last_run(db, "rent"))},
+        "scrape_running": scraper.is_running(), "current_run_id": scraper.current_run_id(),
+        "paused_until": _pause_value(paused), "translate": translate.status(db), "fx": fx.latest(db),
+        "sources": sources, "version": VERSION,
+    })
+
+
+@app.get("/api/stats")
+def api_stats(offer_type: str = "sale", level: str = "osiedle", rooms: Optional[str] = None,
+              market: Optional[str] = None, condition: Optional[str] = None,
+              db: Session = Depends(get_db)):
+    rooms_l = [int(x) for x in _csv(rooms) if x.isdigit()] or None
+    cond_l = _csv(condition) or None
+    key = "stats:%s:%s:%s:%s:%s" % (offer_type, level, rooms_l, market, cond_l)
+    res = _cached(key, lambda: analytics.stats(db, offer_type, level, rooms_l, market, cond_l))
+    coef = {}
+    try:
+        coef = json.loads(get_settings(db).get("area_coef_%s" % offer_type) or "{}")
+    except ValueError:
+        pass
+    return dict(res, area_coef=coef)
+
+
+@app.get("/api/price_index")
+def api_price_index(period: str = "month", offer_type: str = "sale", db: Session = Depends(get_db)):
+    return _cached("index:%s:%s" % (period, offer_type), lambda: analytics.price_index(db, period, offer_type))
+
+
+@app.get("/api/trends")
+def api_trends(weeks: int = 26, offer_type: str = "sale", db: Session = Depends(get_db)):
+    return _cached("trends:%d:%s" % (weeks, offer_type), lambda: analytics.trends(db, weeks, offer_type))
+
+
+@app.get("/api/rent/yield_top")
+def api_yield_top(level: str = "osiedle", rooms: Optional[int] = None, min_rent: int = 8,
+                  min_sale: int = 8, db: Session = Depends(get_db)):
+    return _cached("yield:%s:%s:%d:%d" % (level, rooms, min_rent, min_sale),
+                   lambda: rent_analytics.yield_top(db, level, rooms, min_rent, min_sale))
+
+
+# ---------- контакты ----------
+CONTACT_SQL = """
+SELECT COALESCE(seller_id, 'phone:' || seller_phone, 'name:' || lower(trim(seller_name))) AS seller_key,
+       MAX(seller_name) AS seller_name, MAX(seller_type) AS seller_type, MAX(seller_phone) AS seller_phone,
+       MAX(source) AS source,
+       SUM(CASE WHEN offer_type = 'sale' THEN 1 ELSE 0 END) AS listings_sale,
+       SUM(CASE WHEN offer_type = 'rent' THEN 1 ELSE 0 END) AS listings_rent,
+       COUNT(*) AS active_total, MIN(first_seen) AS first_seen, MAX(last_seen) AS last_seen,
+       GROUP_CONCAT(DISTINCT COALESCE(osiedle_override, osiedle)) AS osiedla,
+       GROUP_CONCAT(id) AS ids
+FROM listings
+WHERE is_active = 1 AND (seller_id IS NOT NULL OR seller_phone IS NOT NULL OR seller_name IS NOT NULL)
+  {where}
+GROUP BY seller_key
+"""
+
+
+def _contacts(db: Session, p: dict) -> List[dict]:
+    where = []
+    params = {}
+    if p.get("offer_type") in ("sale", "rent"):
+        where.append("AND offer_type = :ot")
+        params["ot"] = p["offer_type"]
+    if p.get("seller_type"):
+        where.append("AND seller_type = :st")
+        params["st"] = p["seller_type"]
+    if p.get("q"):
+        where.append("AND (lower(seller_name) LIKE :q OR seller_phone LIKE :q)")
+        params["q"] = u"%%%s%%" % p["q"].strip().lower()
+    sql = CONTACT_SQL.format(where=" ".join(where))
+    rows = db.execute(text(sql), params).mappings().all()
+    out = []
+    for r in rows:
+        ids = [int(x) for x in (r["ids"] or "").split(",") if x][:5]
+        out.append({"seller_key": r["seller_key"], "seller_name": r["seller_name"],
+                    "seller_type": r["seller_type"], "seller_type_uk": i18n.uk("seller_type", r["seller_type"]),
+                    "seller_phone": r["seller_phone"], "source": r["source"],
+                    "listings_sale": r["listings_sale"], "listings_rent": r["listings_rent"],
+                    "active_total": r["active_total"], "first_seen": r["first_seen"], "last_seen": r["last_seen"],
+                    "osiedla": [x for x in (r["osiedla"] or "").split(",") if x][:6], "sample_ids": ids})
+    sort = p.get("sort") or "active_total"
+    if sort not in ("active_total", "last_seen", "listings_rent", "listings_sale", "first_seen"):
+        sort = "active_total"
+    out.sort(key=lambda x: (x[sort] is None, x[sort]), reverse=(p.get("order") or "desc") == "desc")
+    return out
+
+
+@app.get("/api/contacts")
+def api_contacts(request: Request, db: Session = Depends(get_db)):
+    p = dict(request.query_params)
+    rows = _contacts(db, p)
+    page = max(1, int(p.get("page") or 1))
+    per_page = min(500, max(1, int(p.get("per_page") or 50)))
+    return {"total": len(rows), "page": page, "per_page": per_page,
+            "items": rows[(page - 1) * per_page: page * per_page]}
+
+
+def _table_response(rows: List[dict], columns: List[str], fmt: str, name: str):
+    if fmt == "xlsx":
+        try:
+            from openpyxl import Workbook
+        except ImportError:
+            raise HTTPException(500, u"openpyxl не встановлено: pip install openpyxl")
+        wb = Workbook()
+        ws = wb.active
+        ws.append(columns)
+        for r in rows:
+            ws.append([_cell(r.get(c)) for c in columns])
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                 headers={"Content-Disposition": "attachment; filename=%s.xlsx" % name})
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";")
+    w.writerow(columns)
+    for r in rows:
+        w.writerow([_cell(r.get(c)) for c in columns])
+    data = ("﻿" + buf.getvalue()).encode("utf-8")
+    return Response(data, media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": "attachment; filename=%s.csv" % name})
+
+
+def _cell(v):
+    if isinstance(v, (list, tuple)):
+        return u", ".join(str(x) for x in v)
+    if isinstance(v, datetime):
+        return v.strftime("%Y-%m-%d %H:%M")
+    if isinstance(v, bool):
+        return u"так" if v else u"ні"
+    return v
+
+
+@app.get("/api/contacts/export")
+def api_contacts_export(request: Request, format: str = "csv", db: Session = Depends(get_db)):
+    rows = _contacts(db, dict(request.query_params))
+    cols = ["seller_name", "seller_type_uk", "seller_phone", "source", "listings_sale", "listings_rent",
+            "active_total", "osiedla", "first_seen", "last_seen", "seller_key"]
+    return _table_response(rows, cols, format, "contacts")
+
+
+@app.get("/api/export")
+def api_export(request: Request, format: str = "csv", db: Session = Depends(get_db)):
+    p = dict(request.query_params)
+    p["_deal_threshold"] = get_float(db, "deal_threshold_pct", 10.0)
+    q = _apply_filters(db.query(Listing), p).order_by(Listing.first_seen.desc()).limit(5000)
+    rows = q.all()
+    ph = _price_stats(db, [r.id for r in rows])
+    dicts = [row_dict(r, ph.get(r.id)) for r in rows]
+    cols = ["id", "source", "url", "title_uk", "title_pl", "price_pln", "price_usd", "price_per_m2", "czynsz_pln",
+            "area", "rooms", "floor", "floors_total", "build_year", "market_uk", "building_type_uk",
+            "condition_uk", "district", "osiedle", "street", "seller_type_uk", "seller_name", "seller_phone",
+            "discount_pct", "baseline_sqm", "baseline_count", "yield_pct", "rent_median_pln",
+            "posted_at", "first_seen", "days_on_market", "price_changes", "price_drop_pct"]
+    return _table_response(dicts, cols, format, "listings")
+
+
+# ---------- прогоны ----------
+@app.get("/api/runs")
+def api_runs(limit: int = 50, db: Session = Depends(get_db)):
+    rows = db.query(ScrapeRun).order_by(ScrapeRun.started_at.desc()).limit(limit).all()
+    return [_run_dict(r) for r in rows]
+
+
+def _bg(target, *args):
+    t = threading.Thread(target=target, args=args, daemon=True)
+    t.start()
+    return t
+
+
+def _scrape_bg(kind: str, sources: str):
+    try:
+        scraper.run_scrape(kind, sources)
+    except Exception as e:  # noqa: BLE001
+        log.error("прогон %s упал: %s", kind, e)
+    _cache.clear()
+
+
+def _start_scrape(db: Session, kind: str, sources: str = "all") -> dict:
+    if scraper.is_running():
+        raise HTTPException(409, u"прогін уже йде")
+    if scraper.paused_until(db):
+        raise HTTPException(409, u"скрапінг на паузі")
+    _bg(_scrape_bg, kind, sources)
+    return {"started": True, "kind": kind, "sources": sources}
+
+
+@app.post("/api/scrape")
+def api_scrape(kind: str = "sale", source: str = "all", db: Session = Depends(get_db)):
+    if kind not in ("sale", "rent", "all"):
+        raise HTTPException(400, u"kind: sale | rent | all")
+    if kind == "all":
+        if scraper.is_running() or scraper.paused_until(db):
+            raise HTTPException(409, u"прогін уже йде або пауза")
+
+        def both():
+            _scrape_bg("sale", source)
+            _scrape_bg("rent", source)
+        _bg(both)
+        return {"started": True, "kind": "all"}
+    return _start_scrape(db, kind, source)
+
+
+@app.post("/api/scrape/stop")
+def api_scrape_stop():
+    scraper.request_stop()
+    return {"stopping": True}
+
+
+def _pause_value(dt):
+    """Бессрочная пауза хранится как 9999 год; наружу — «forever», чтобы
+    интерфейс писал «до скасування», а не дату из десятого тысячелетия."""
+    if dt is None:
+        return None
+    return "forever" if dt.year >= 9999 else dt
+
+
+@app.post("/api/scrape/pause")
+def api_scrape_pause(body: dict, db: Session = Depends(get_db)):
+    until = scraper.set_pause(db, float(body.get("hours") or 0))
+    return {"paused_until": _pause_value(until)}
+
+
+@app.post("/api/scrape/resume")
+def api_scrape_resume(db: Session = Depends(get_db)):
+    scraper.resume(db)
+    return {"paused_until": None}
+
+
+def _recompute_bg():
+    db = SessionLocal()
+    try:
+        log.info("пересчёт: %s", scraper.post_process(db, None))
+    finally:
+        db.close()
+        _cache.clear()
+
+
+@app.post("/api/recompute")
+def api_recompute():
+    _bg(_recompute_bg)
+    return {"started": True}
+
+
+# ---------- перевод ----------
+@app.get("/api/translate/status")
+def api_translate_status(db: Session = Depends(get_db)):
+    return translate.status(db)
+
+
+def _translate_bg(limit: Optional[int]):
+    db = SessionLocal()
+    try:
+        log.info("перевод очереди: %s", translate.translate_pending(db, limit))
+    finally:
+        db.close()
+
+
+@app.post("/api/translate/run")
+def api_translate_run(body: Optional[dict] = None, db: Session = Depends(get_db)):
+    if translate.get_provider(get_settings(db)) is None:
+        raise HTTPException(400, u"провайдер перекладу не налаштований")
+    _bg(_translate_bg, (body or {}).get("limit"))
+    return {"started": True}
+
+
+@app.get("/api/translate/unknown_values")
+def api_unknown_values(db: Session = Depends(get_db)):
+    rows = db.query(UnknownValue).order_by(UnknownValue.count.desc()).limit(300).all()
+    return [{"field": r.field, "value_pl": r.value_pl, "count": r.count, "last_seen": r.last_seen} for r in rows]
+
+
+# ---------- настройки ----------
+@app.get("/api/settings")
+def api_settings(db: Session = Depends(get_db)):
+    vals = get_settings(db)
+    out = {}
+    for k, v in vals.items():
+        if k.startswith("resume:"):
+            continue
+        out[k] = (SECRET_MASK if v else "") if k in SECRET_KEYS else v
+    return out
+
+
+@app.post("/api/settings")
+def api_settings_save(body: dict, db: Session = Depends(get_db)):
+    saved = []
+    for k, v in (body or {}).items():
+        if k not in SAFE_KEYS:
+            continue
+        if k in SECRET_KEYS and v == SECRET_MASK:
+            continue        # поле не трогали
+        set_setting(db, k, "" if v is None else str(v))
+        saved.append(k)
+    _cache.clear()
+    return {"saved": saved}
+
+
+# ---------- планировщик (только для разработки; в бою — Планировщик Windows) ----------
+scheduler = BackgroundScheduler(timezone=KYIV)
+
+
+def _sched_scrape(kind: str):
+    delay = random.randint(*SCAN_JITTER_SEC)
+    log.info("плановый прогон %s через %d с", kind, delay)
+    threading.Timer(delay, lambda: _scrape_bg(kind, "all")).start()
+
+
+def _watchdog():
+    db = SessionLocal()
+    try:
+        n = scraper.close_stale_runs(db)
+        if n:
+            log.warning("сторож закрыл %d зависших прогонов", n)
+    finally:
+        db.close()
+
+
+@app.get("/api/jobs")
+def api_jobs():
+    return {"scheduler_running": scheduler.running,
+            "disabled_by_env": os.environ.get("DISABLE_SCHEDULER") == "1",
+            "jobs": [{"id": j.id, "next_run": j.next_run_time} for j in scheduler.get_jobs()] if scheduler.running else []}
+
+
+@app.on_event("startup")
+def _startup():
+    ensure_columns()
+    db = SessionLocal()
+    try:
+        scraper.close_stale_runs(db)
+    finally:
+        db.close()
+    if os.environ.get("DISABLE_SCHEDULER") != "1":
+        for h in SCAN_HOURS_SALE:
+            scheduler.add_job(lambda: _sched_scrape("sale"), CronTrigger(hour=h, minute=0), id="sale_%d" % h)
+        scheduler.add_job(lambda: _sched_scrape("rent"), CronTrigger(hour=SCAN_HOUR_RENT, minute=SCAN_MINUTE_RENT), id="rent")
+        scheduler.add_job(_watchdog, "interval", minutes=10, id="watchdog")
+        scheduler.add_job(lambda: _bg(_translate_bg, None), "interval", hours=1, id="translate")
+        scheduler.start()
+        log.info("внутренний планировщик включён: %d заданий", len(scheduler.get_jobs()))
+    else:
+        log.info("внутренний планировщик выключен (DISABLE_SCHEDULER=1) — расписанием управляет Планировщик Windows")
+
+
+@app.on_event("shutdown")
+def _shutdown():
+    if scheduler.running:
+        scheduler.shutdown(wait=False)
+
+
+if FRONTEND_DIST.exists():
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="frontend")
+else:
+    @app.get("/")
+    def _no_frontend():
+        return JSONResponse({"detail": u"фронтенд не зібраний: cd frontend && npm run build"}, status_code=200)

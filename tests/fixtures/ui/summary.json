@@ -1,0 +1,75 @@
+{
+  "sale": {
+    "active": 6120,
+    "new_24h": 143,
+    "median_sqm": 13850,
+    "median_price": 749000,
+    "removed_7d": 402
+  },
+  "rent": {
+    "active": 2380,
+    "new_24h": 96,
+    "median_rent": 3200,
+    "median_rent_sqm": 68.5
+  },
+  "last_runs": {
+    "sale": {
+      "id": 41,
+      "kind": "sale",
+      "source": "all",
+      "status": "done",
+      "started_at": "2026-09-18T11:07:00+03:00",
+      "finished_at": "2026-09-18T12:03:00+03:00",
+      "last_beat": "2026-09-18T12:03:00+03:00",
+      "pages": 398,
+      "seen": 6120,
+      "new": 143,
+      "updated": 5870,
+      "removed": 61,
+      "errors": 2,
+      "message": "otodom 150 стор., olx 248 стор.; хвіст 143 карток"
+    },
+    "rent": {
+      "id": 40,
+      "kind": "rent",
+      "source": "all",
+      "status": "done",
+      "started_at": "2026-09-18T02:31:00+03:00",
+      "finished_at": "2026-09-18T03:02:00+03:00",
+      "last_beat": "2026-09-18T03:02:00+03:00",
+      "pages": 120,
+      "seen": 2380,
+      "new": 96,
+      "updated": 2250,
+      "removed": 34,
+      "errors": 0,
+      "message": null
+    }
+  },
+  "scrape_running": false,
+  "paused_until": "2026-09-18T21:00:00+03:00",
+  "translate": {
+    "pending_titles": 12,
+    "pending_descriptions": 640,
+    "done_total": 5480,
+    "provider": "ollama",
+    "model": "qwen2.5:7b"
+  },
+  "fx": {
+    "USD": 3.98,
+    "EUR": 4.31,
+    "date": "2026-09-18"
+  },
+  "sources": [
+    {
+      "source": "otodom",
+      "active": 4210,
+      "last_seen": "2026-09-18T12:03:00+03:00"
+    },
+    {
+      "source": "olx",
+      "active": 1910,
+      "last_seen": "2026-09-18T12:03:00+03:00"
+    }
+  ]
+}

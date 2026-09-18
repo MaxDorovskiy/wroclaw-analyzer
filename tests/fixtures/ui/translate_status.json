@@ -1,0 +1,10 @@
+{
+  "provider": "ollama",
+  "model": "qwen2.5:7b",
+  "pending_titles": 12,
+  "pending_descriptions": 640,
+  "done_total": 5480,
+  "done_today": 310,
+  "last_error": null,
+  "running": false
+}

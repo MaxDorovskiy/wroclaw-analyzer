@@ -1,0 +1,52 @@
+{
+  "points": [
+    {
+      "period": "2026-02",
+      "index": 100.0,
+      "change_pct": null,
+      "n": 900
+    },
+    {
+      "period": "2026-03",
+      "index": 100.8,
+      "change_pct": 0.8,
+      "n": 940
+    },
+    {
+      "period": "2026-04",
+      "index": 101.9,
+      "change_pct": 1.09,
+      "n": 980
+    },
+    {
+      "period": "2026-05",
+      "index": 102.4,
+      "change_pct": 0.49,
+      "n": 1020
+    },
+    {
+      "period": "2026-06",
+      "index": 103.6,
+      "change_pct": 1.17,
+      "n": 1060
+    },
+    {
+      "period": "2026-07",
+      "index": 103.1,
+      "change_pct": -0.48,
+      "n": 1100
+    },
+    {
+      "period": "2026-08",
+      "index": 104.2,
+      "change_pct": 1.07,
+      "n": 1140
+    },
+    {
+      "period": "2026-09",
+      "index": 104.9,
+      "change_pct": 0.67,
+      "n": 1180
+    }
+  ]
+}

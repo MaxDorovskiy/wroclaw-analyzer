@@ -1,0 +1,142 @@
+{
+  "districts": [
+    {
+      "name": "Stare Miasto",
+      "name_uk": "Старе Місто",
+      "osiedla": [
+        {
+          "name": "Stare Miasto",
+          "name_uk": "Старе Місто",
+          "sale_active": 310,
+          "rent_active": 240
+        },
+        {
+          "name": "Przedmieście Świdnickie",
+          "name_uk": "Пшедмєсьцє Свідницьке",
+          "sale_active": 120,
+          "rent_active": 95
+        },
+        {
+          "name": "Szczepin",
+          "name_uk": "Щепін",
+          "sale_active": 140,
+          "rent_active": 88
+        }
+      ]
+    },
+    {
+      "name": "Śródmieście",
+      "name_uk": "Шрудмєсьцє",
+      "osiedla": [
+        {
+          "name": "Nadodrze",
+          "name_uk": "Надодже",
+          "sale_active": 260,
+          "rent_active": 150
+        },
+        {
+          "name": "Ołbin",
+          "name_uk": "Ольбін",
+          "sale_active": 210,
+          "rent_active": 130
+        },
+        {
+          "name": "Plac Grunwaldzki",
+          "name_uk": "Площа Ґрунвальдська",
+          "sale_active": 180,
+          "rent_active": 210
+        },
+        {
+          "name": "Zacisze-Zalesie-Szczytniki",
+          "name_uk": "Зацише-Залесє-Щитники",
+          "sale_active": 70,
+          "rent_active": 40
+        }
+      ]
+    },
+    {
+      "name": "Krzyki",
+      "name_uk": "Кшики",
+      "osiedla": [
+        {
+          "name": "Gaj",
+          "name_uk": "Ґай",
+          "sale_active": 240,
+          "rent_active": 110
+        },
+        {
+          "name": "Huby",
+          "name_uk": "Губи",
+          "sale_active": 160,
+          "rent_active": 90
+        },
+        {
+          "name": "Krzyki-Partynice",
+          "name_uk": "Кшики-Партиніце",
+          "sale_active": 330,
+          "rent_active": 120
+        },
+        {
+          "name": "Tarnogaj",
+          "name_uk": "Тарноґай",
+          "sale_active": 150,
+          "rent_active": 60
+        },
+        {
+          "name": "Jagodno",
+          "name_uk": "Яґодно",
+          "sale_active": 410,
+          "rent_active": 140
+        }
+      ]
+    },
+    {
+      "name": "Fabryczna",
+      "name_uk": "Фабрична",
+      "osiedla": [
+        {
+          "name": "Grabiszyn-Grabiszynek",
+          "name_uk": "Ґрабішин-Ґрабішинек",
+          "sale_active": 200,
+          "rent_active": 90
+        },
+        {
+          "name": "Muchobór Wielki",
+          "name_uk": "Мухобур Великий",
+          "sale_active": 280,
+          "rent_active": 100
+        },
+        {
+          "name": "Kuźniki",
+          "name_uk": "Кузьніки",
+          "sale_active": 130,
+          "rent_active": 50
+        }
+      ]
+    },
+    {
+      "name": "Psie Pole",
+      "name_uk": "Псє Поле",
+      "osiedla": [
+        {
+          "name": "Karłowice-Różanka",
+          "name_uk": "Карловіце-Ружанка",
+          "sale_active": 170,
+          "rent_active": 70
+        },
+        {
+          "name": "Sołtysowice",
+          "name_uk": "Солтисовіце",
+          "sale_active": 90,
+          "rent_active": 30
+        },
+        {
+          "name": "Zakrzów",
+          "name_uk": "Закшув",
+          "sale_active": 120,
+          "rent_active": 40
+        }
+      ]
+    }
+  ]
+}

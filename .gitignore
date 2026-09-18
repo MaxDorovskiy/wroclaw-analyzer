@@ -1,0 +1,17 @@
+# База, кэш переводов, снимки страниц — не в git
+data/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node / сборка (пересоздаётся)
+frontend/node_modules/
+frontend/dist/
+
+# Прочее
+.DS_Store
+*.log
+.env

@@ -1,0 +1,17 @@
+[
+  {
+    "field": "heating",
+    "value_pl": "pompa ciepła",
+    "count": 14
+  },
+  {
+    "field": "building_type",
+    "value_pl": "loft",
+    "count": 3
+  },
+  {
+    "field": "windows",
+    "value_pl": "aluminiowe",
+    "count": 7
+  }
+]

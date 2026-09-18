@@ -1,0 +1,221 @@
+{
+  "id": 101,
+  "source": "otodom",
+  "source_id": "65432101",
+  "url": "https://www.otodom.pl/pl/oferta/mieszkanie-3-pok-krzyki-po-remoncie-ID4xyz",
+  "external_url": null,
+  "offer_type": "sale",
+  "title_pl": "Mieszkanie 3 pok. Krzyki, po remoncie, balkon",
+  "title_uk": "Квартира 3 кімн. Кшики, після ремонту, балкон",
+  "price_pln": 780000,
+  "price_usd": 195980,
+  "price_eur": 180970,
+  "price_per_m2": 13000,
+  "czynsz_pln": 650,
+  "area": 60.0,
+  "rooms": 3,
+  "floor": 2,
+  "floors_total": 4,
+  "build_year": 2008,
+  "market": "secondary",
+  "building_type": "block",
+  "building_type_uk": "блочний будинок",
+  "condition": "renovated",
+  "condition_uk": "після ремонту",
+  "condition_src": "auto",
+  "district": "Krzyki",
+  "district_uk": "Кшики",
+  "osiedle": "Gaj",
+  "osiedle_uk": "Ґай",
+  "street": "ul. Świeradowska",
+  "lat": 51.0812,
+  "lon": 17.0334,
+  "seller_type": "agency",
+  "seller_type_uk": "агенція",
+  "seller_name": "Nieruchomości XYZ",
+  "seller_phone": "+48 601 234 567",
+  "seller_id": "otodom:agency:8841",
+  "seller_key": "otodom:agency:8841",
+  "no_commission": false,
+  "images": [
+    "https://ireland.apollo.olxcdn.com/v1/files/eyJmbiI6ImFiYyIsInciOlt7ImZuIjoid2c0Z25xcDZ4NGktQVBMIiwicyI6IjE0IiwicCI6IjEwLC0xMCIsImEiOiIwIn1dfQ.jpg/image;s=1",
+    "https://ireland.apollo.olxcdn.com/v1/files/eyJmbiI6ImFiYyIsInciOlt7ImZuIjoid2c0Z25xcDZ4NGktQVBMIiwicyI6IjE0IiwicCI6IjEwLC0xMCIsImEiOiIwIn1dfQ.jpg/image;s=2",
+    "https://ireland.apollo.olxcdn.com/v1/files/eyJmbiI6ImFiYyIsInciOlt7ImZuIjoid2c0Z25xcDZ4NGktQVBMIiwicyI6IjE0IiwicCI6IjEwLC0xMCIsImEiOiIwIn1dfQ.jpg/image;s=3",
+    "https://ireland.apollo.olxcdn.com/v1/files/eyJmbiI6ImFiYyIsInciOlt7ImZuIjoid2c0Z25xcDZ4NGktQVBMIiwicyI6IjE0IiwicCI6IjEwLC0xMCIsImEiOiIwIn1dfQ.jpg/image;s=4",
+    "https://ireland.apollo.olxcdn.com/v1/files/eyJmbiI6ImFiYyIsInciOlt7ImZuIjoid2c0Z25xcDZ4NGktQVBMIiwicyI6IjE0IiwicCI6IjEwLC0xMCIsImEiOiIwIn1dfQ.jpg/image;s=5",
+    "https://ireland.apollo.olxcdn.com/v1/files/eyJmbiI6ImFiYyIsInciOlt7ImZuIjoid2c0Z25xcDZ4NGktQVBMIiwicyI6IjE0IiwicCI6IjEwLC0xMCIsImEiOiIwIn1dfQ.jpg/image;s=6",
+    "https://ireland.apollo.olxcdn.com/v1/files/eyJmbiI6ImFiYyIsInciOlt7ImZuIjoid2c0Z25xcDZ4NGktQVBMIiwicyI6IjE0IiwicCI6IjEwLC0xMCIsImEiOiIwIn1dfQ.jpg/image;s=7",
+    "https://ireland.apollo.olxcdn.com/v1/files/eyJmbiI6ImFiYyIsInciOlt7ImZuIjoid2c0Z25xcDZ4NGktQVBMIiwicyI6IjE0IiwicCI6IjEwLC0xMCIsImEiOiIwIn1dfQ.jpg/image;s=8",
+    "https://ireland.apollo.olxcdn.com/v1/files/eyJmbiI6ImFiYyIsInciOlt7ImZuIjoid2c0Z25xcDZ4NGktQVBMIiwicyI6IjE0IiwicCI6IjEwLC0xMCIsImEiOiIwIn1dfQ.jpg/image;s=9",
+    "https://ireland.apollo.olxcdn.com/v1/files/eyJmbiI6ImFiYyIsInciOlt7ImZuIjoid2c0Z25xcDZ4NGktQVBMIiwicyI6IjE0IiwicCI6IjEwLC0xMCIsImEiOiIwIn1dfQ.jpg/image;s=10",
+    "https://ireland.apollo.olxcdn.com/v1/files/eyJmbiI6ImFiYyIsInciOlt7ImZuIjoid2c0Z25xcDZ4NGktQVBMIiwicyI6IjE0IiwicCI6IjEwLC0xMCIsImEiOiIwIn1dfQ.jpg/image;s=11",
+    "https://ireland.apollo.olxcdn.com/v1/files/eyJmbiI6ImFiYyIsInciOlt7ImZuIjoid2c0Z25xcDZ4NGktQVBMIiwicyI6IjE0IiwicCI6IjEwLC0xMCIsImEiOiIwIn1dfQ.jpg/image;s=12",
+    "https://ireland.apollo.olxcdn.com/v1/files/eyJmbiI6ImFiYyIsInciOlt7ImZuIjoid2c0Z25xcDZ4NGktQVBMIiwicyI6IjE0IiwicCI6IjEwLC0xMCIsImEiOiIwIn1dfQ.jpg/image;s=13",
+    "https://ireland.apollo.olxcdn.com/v1/files/eyJmbiI6ImFiYyIsInciOlt7ImZuIjoid2c0Z25xcDZ4NGktQVBMIiwicyI6IjE0IiwicCI6IjEwLC0xMCIsImEiOiIwIn1dfQ.jpg/image;s=14"
+  ],
+  "image_count": 14,
+  "posted_at": "2026-09-10T00:00:00+03:00",
+  "first_seen": "2026-09-10T11:20:00+03:00",
+  "last_seen": "2026-09-18T12:01:00+03:00",
+  "is_active": true,
+  "days_on_market": 8,
+  "dedup_group": "g:otodom:65432101",
+  "group_size": 2,
+  "discount_pct": 11.4,
+  "baseline_sqm": 14670,
+  "baseline_level": "osiedle_rooms",
+  "baseline_count": 17,
+  "deal_thin_base": false,
+  "yield_pct": 5.9,
+  "rent_median_pln": 3850,
+  "rent_baseline_level": "osiedle_rooms",
+  "rent_baseline_count": 12,
+  "price_changes": 1,
+  "price_drop_pct": -4.9,
+  "is_favorite": true,
+  "translated": true,
+  "description_pl": "Na sprzedaż przestronne 3-pokojowe mieszkanie o powierzchni 60 m² na osiedlu Gaj (Krzyki).\n\nMieszkanie po generalnym remoncie w 2023 r.: nowa instalacja elektryczna, panele, kuchnia w zabudowie z AGD, łazienka z prysznicem. Salon z wyjściem na balkon od strony południowej. Dwie sypialnie. Czynsz administracyjny 650 zł (w tym ogrzewanie i woda).\n\nBudynek z 2008 r., winda, miejsce postojowe w hali garażowej za dopłatą 45 000 zł. W pobliżu przystanki tramwajowe, Biedronka, szkoła. Rynek wtórny, własność. Możliwość zakupu z wyposażeniem.",
+  "description_uk": "Продається простора 3-кімнатна квартира площею 60 м² на осиедле Ґай (Кшики).\n\nКвартира після капітального ремонту 2023 р.: нова електропроводка, ламінат, вбудована кухня з технікою, ванна з душем. Вітальня з виходом на балкон з південного боку. Дві спальні. Експлуатаційний платіж 650 zł (включно з опаленням і водою).\n\nБудинок 2008 р., ліфт, паркомісце в підземному гаражі за доплату 45 000 zł. Поруч трамвайні зупинки, Biedronka, школа. Вторинний ринок, власність. Можливий продаж з меблями.",
+  "characteristics": [
+    {
+      "key": "rooms",
+      "label_pl": "Liczba pokoi",
+      "label_uk": "Кількість кімнат",
+      "value_pl": "3",
+      "value_uk": "3"
+    },
+    {
+      "key": "area",
+      "label_pl": "Powierzchnia",
+      "label_uk": "Площа",
+      "value_pl": "60 m²",
+      "value_uk": "60 м²"
+    },
+    {
+      "key": "floor",
+      "label_pl": "Piętro",
+      "label_uk": "Поверх",
+      "value_pl": "2/4",
+      "value_uk": "2/4"
+    },
+    {
+      "key": "market",
+      "label_pl": "Rynek",
+      "label_uk": "Ринок",
+      "value_pl": "wtórny",
+      "value_uk": "вторинний"
+    },
+    {
+      "key": "building_type",
+      "label_pl": "Rodzaj zabudowy",
+      "label_uk": "Тип будинку",
+      "value_pl": "blok",
+      "value_uk": "блочний будинок"
+    },
+    {
+      "key": "build_year",
+      "label_pl": "Rok budowy",
+      "label_uk": "Рік будівництва",
+      "value_pl": "2008",
+      "value_uk": "2008"
+    },
+    {
+      "key": "heating",
+      "label_pl": "Ogrzewanie",
+      "label_uk": "Опалення",
+      "value_pl": "miejskie",
+      "value_uk": "центральне"
+    },
+    {
+      "key": "windows",
+      "label_pl": "Okna",
+      "label_uk": "Вікна",
+      "value_pl": "plastikowe",
+      "value_uk": "пластикові"
+    },
+    {
+      "key": "ownership",
+      "label_pl": "Forma własności",
+      "label_uk": "Форма власності",
+      "value_pl": "pełna własność",
+      "value_uk": "повна власність"
+    },
+    {
+      "key": "elevator",
+      "label_pl": "Winda",
+      "label_uk": "Ліфт",
+      "value_pl": "tak",
+      "value_uk": "так"
+    },
+    {
+      "key": "extras",
+      "label_pl": "Informacje dodatkowe",
+      "label_uk": "Додатково",
+      "value_pl": "balkon, garaż/miejsce parkingowe, piwnica",
+      "value_uk": "балкон, гараж/паркомісце, підвал"
+    },
+    {
+      "key": "condition",
+      "label_pl": "Stan wykończenia",
+      "label_uk": "Стан",
+      "value_pl": "do zamieszkania",
+      "value_uk": null
+    }
+  ],
+  "price_history": [
+    {
+      "price_pln": 820000,
+      "seen_at": "2026-09-10T11:20:00+03:00"
+    },
+    {
+      "price_pln": 780000,
+      "seen_at": "2026-09-15T11:05:00+03:00"
+    }
+  ],
+  "dupes": [
+    {
+      "id": 101,
+      "source": "otodom",
+      "url": "https://www.otodom.pl/pl/oferta/mieszkanie-3-pok-krzyki-po-remoncie-ID4xyz",
+      "price_pln": 780000,
+      "seller_type": "agency",
+      "first_seen": "2026-09-10T11:20:00+03:00",
+      "is_active": true
+    },
+    {
+      "id": 155,
+      "source": "olx",
+      "url": "https://www.olx.pl/d/oferta/mieszkanie-3-pok-gaj-ID9zz.html",
+      "price_pln": 785000,
+      "seller_type": "agency",
+      "first_seen": "2026-09-11T11:22:00+03:00",
+      "is_active": true
+    }
+  ],
+  "deal_explain": {
+    "level": "osiedle_rooms",
+    "key": "Gaj × 3 × secondary × renovated",
+    "pool_size": 17,
+    "median_sqm": 14670,
+    "area_coef": 1.012,
+    "price_sqm_adj": 13156,
+    "steps": [
+      {
+        "level": "osiedle_rooms",
+        "key": "Gaj × 3 × secondary × renovated",
+        "n": 17,
+        "ok": true
+      }
+    ]
+  },
+  "rent_explain": {
+    "level": "osiedle_rooms",
+    "count": 12,
+    "median_sqm": 64.2,
+    "expected_rent": 3850,
+    "investment_pln": 780000,
+    "renovation_cost_pln": 0
+  },
+  "note": "Дзвонила 16.09: торг до 750 тис. можливий, паркомісце окремо.",
+  "raw_available": true
+}

@@ -1,0 +1,19 @@
+{
+  "translate_provider": "ollama",
+  "translate_ollama_url": "http://127.0.0.1:11434",
+  "translate_ollama_model": "qwen2.5:7b",
+  "translate_anthropic_model": "claude-sonnet-4-5",
+  "translate_anthropic_key": "••••••••",
+  "translate_google_key": "",
+  "translate_deepl_key": "••••••••",
+  "translate_daily_cap": 800,
+  "deal_threshold_pct": 10,
+  "renovation_cost_sqm_pln": 2000,
+  "olx_category_sale": "1307",
+  "olx_category_rent": "1309",
+  "olx_city_id": "19701",
+  "fetch_mode": "httpx",
+  "requests_per_minute": 15,
+  "public_url": "http://desktop-wro.local:8020",
+  "scrape_paused_until": "2026-09-18T18:00:00"
+}
