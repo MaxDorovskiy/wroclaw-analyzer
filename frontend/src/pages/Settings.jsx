@@ -10,6 +10,7 @@ import { useFlash } from '../components/Toast.jsx'
 // на сервере — иначе поле молча ничего не сделает (об этом предупреждаем).
 const SECTIONS = [
   ['Переклад', [
+    { key: 'translate_enabled', label: 'Автопереклад після прогону', type: 'select', options: T.onOff, hint: 'черга перекладається окремим потоком після кожного прогону; кнопки «Перекласти чергу» і «Перекласти» в картці працюють завжди' },
     { key: 'translate_provider', label: 'Провайдер перекладу', type: 'select', options: T.provider },
     { key: 'translate_ollama_url', label: 'Ollama: адреса', hint: 'наприклад http://127.0.0.1:11434' },
     { key: 'translate_ollama_model', label: 'Ollama: модель' },

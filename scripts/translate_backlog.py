@@ -22,7 +22,7 @@ def main():
     args = ap.parse_args()
     db = SessionLocal()
     print(translate.status(db))
-    print(translate.translate_pending(db, args.limit))
+    print(translate.translate_pending(db, args.limit, manual=True))
 
 
 if __name__ == "__main__":

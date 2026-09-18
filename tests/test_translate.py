@@ -73,6 +73,12 @@ def test_queue_takes_freshly_posted_first(clean_db, monkeypatch):
     db.refresh(old)
     db.refresh(new)
     assert new.title_uk and old.title_uk is None
+    # выключатель — про АВТОперевод; кнопка «Перекласти чергу» (manual) работает и при нём
+    set_setting(db, "translate_enabled", "0")
+    assert translate.translate_pending(db, limit=1) == u"выключено"
+    assert translate.translate_pending(db, limit=1, manual=True).startswith(u"заголовков 1")
+    db.refresh(old)
+    assert old.title_uk
 
 
 def test_ollama_context_comes_from_settings(monkeypatch):

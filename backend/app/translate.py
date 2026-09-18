@@ -267,12 +267,16 @@ def pending_counts(db: Session) -> Dict[str, int]:
 
 
 def translate_pending(db: Session, limit: Optional[int] = None,
-                      stop_check: Optional[Callable[[], bool]] = None) -> str:
+                      stop_check: Optional[Callable[[], bool]] = None, manual: bool = False) -> str:
     """Очередь: заголовки всех новых (короткие), потом описания в пределах
     суточного потолка, самые новые первыми. Три ошибки подряд — стоп: если
-    Ollama выключена, нечего долбить её сотней запросов."""
+    Ollama выключена, нечего долбить её сотней запросов.
+
+    translate_enabled выключает АВТОперевод после прогона. Кнопка «Перекласти
+    чергу» и translate_backlog.py (manual=True) — явное действие владельца: при
+    выключенном автопереводе кнопка отвечала «запущено», а в логе было «выключено»."""
     settings = get_settings(db)
-    if settings.get("translate_enabled") != "1":
+    if not manual and settings.get("translate_enabled") != "1":
         return u"выключено"
     provider = get_provider(settings)
     if provider is None:

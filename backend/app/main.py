@@ -818,7 +818,7 @@ def api_translate_status(db: Session = Depends(get_db)):
 def _translate_bg(limit: Optional[int]):
     db = SessionLocal()
     try:
-        log.info("перевод очереди: %s", translate.translate_pending(db, limit))
+        log.info("перевод очереди: %s", translate.translate_pending(db, limit, manual=True))
     finally:
         db.close()
 

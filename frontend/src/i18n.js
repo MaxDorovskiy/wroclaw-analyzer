@@ -76,6 +76,7 @@ export const T = {
     none: 'без перекладу',
   },
   fetchMode: { httpx: 'httpx (швидко, без браузера)', browser: 'браузер (Playwright)' },
+  onOff: { 1: 'увімкнено', 0: 'вимкнено' },
 }
 
 export const tr = (dict, code) =>
