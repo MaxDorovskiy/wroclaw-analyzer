@@ -243,10 +243,15 @@ def _scrape_details(db: Session, run: ScrapeRun, src, kind: str, fetcher, settin
         limit = int(float(settings.get("details_per_run") or 600))
     except ValueError:
         limit = 600
+    # Свежие — по дате ПОДАЧИ, а не по first_seen: в первом прогоне first_seen — это
+    # порядок нашей вставки, и самыми «новыми» выходили последние страницы выдачи.
+    # 18.09.2026 первые 250 карточек хвоста ушли на запасы застройщиков с глубоких
+    # страниц, а объявления сегодняшнего дня ждали бы очереди ~16 прогонов
+    # (9.4 тыс. объявлений при 600 карточках за прогон).
     ids = [r[0] for r in db.execute(
         select(Listing.id).where(Listing.source == src.name, Listing.offer_type == kind,
                                  Listing.is_active.is_(True), Listing.details_fetched.is_(False))
-        .order_by(Listing.first_seen.desc()).limit(limit)).all()]
+        .order_by(Listing.posted_at.desc(), Listing.first_seen.desc()).limit(limit)).all()]
     if not ids:
         return
     log.info("%s/%s: хвост, карточек %d", src.name, kind, len(ids))

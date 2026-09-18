@@ -37,6 +37,26 @@ def test_cache_and_chunks(clean_db):
     assert st["pending_titles"] == 0 and st["done_total"] == 2
 
 
+def test_queue_takes_freshly_posted_first(clean_db, monkeypatch):
+    """Первый прогон вставляет объявления в порядке страниц выдачи, и «свежее по
+    first_seen» — это последняя страница, то есть самое старое. Очередь идёт по дате подачи."""
+    from datetime import datetime
+    db = clean_db
+    old = Listing(source="otodom", source_id="1", offer_type="sale", title_pl=u"Stare ogłoszenie", is_active=True,
+                  posted_at=datetime(2026, 1, 30), first_seen=datetime(2026, 9, 18, 9, 15))    # вставлено позже
+    new = Listing(source="otodom", source_id="2", offer_type="sale", title_pl=u"Dzisiejsze ogłoszenie", is_active=True,
+                  posted_at=datetime(2026, 9, 18), first_seen=datetime(2026, 9, 18, 9, 5))
+    db.add_all([old, new])
+    db.commit()
+    monkeypatch.setattr(translate, "get_provider", lambda settings: Fake())
+    from app.settings_store import set_setting
+    set_setting(db, "translate_enabled", "1")
+    translate.translate_pending(db, limit=1)
+    db.refresh(old)
+    db.refresh(new)
+    assert new.title_uk and old.title_uk is None
+
+
 def test_ollama_context_comes_from_settings(monkeypatch):
     """Контекст должен совпадать с уже загруженным экземпляром модели, иначе Ollama
     перезагружает её на каждый запрос (замер: 15-25 с против 0.0 с)."""

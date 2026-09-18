@@ -142,6 +142,9 @@ ALIASES = {
     u"centrum": u"Stare Miasto",
     u"nowe zerniki": u"Żerniki",
     u"rynek": u"Stare Miasto",
+    # Две строки ниже НЕ сверены (поиск по адресам геопортала 18.09.2026 не отвечал).
+    # На данные не влияют: ни Otodom (70 имён под-районов), ни OLX таких имён не
+    # присылают; объявление с Kępa Mieszczańska Otodom отнёс к Nadodrze.
     u"ostrow tumski": u"Stare Miasto",
     u"kepa mieszczanska": u"Stare Miasto",
     u"przedmiescie swidnickie": u"Przedmieście Świdnickie",

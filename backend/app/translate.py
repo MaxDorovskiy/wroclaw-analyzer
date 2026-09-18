@@ -275,9 +275,12 @@ def translate_pending(db: Session, limit: Optional[int] = None,
     done_t = done_d = 0
     errors = 0
     try:
+        # свежие — по дате подачи (см. тот же довод в scraper._scrape_details): по first_seen
+        # первая очередь из 20 целиком ушла на одну инвестицию с последней страницы выдачи
+        fresh = (Listing.is_representative.desc(), Listing.posted_at.desc(), Listing.first_seen.desc())
         q = (db.query(Listing).filter(Listing.is_active.is_(True), Listing.title_pl.isnot(None),
                                       Listing.title_uk.is_(None))
-             .order_by(Listing.is_representative.desc(), Listing.first_seen.desc()).limit(limit or 3000))
+             .order_by(*fresh).limit(limit or 3000))
         for row in q.all():
             if stop_check and stop_check():
                 break
@@ -297,7 +300,7 @@ def translate_pending(db: Session, limit: Optional[int] = None,
             budget = min(budget, limit)
         q = (db.query(Listing).filter(Listing.is_active.is_(True), Listing.description_pl.isnot(None),
                                       Listing.description_uk.is_(None))
-             .order_by(Listing.is_representative.desc(), Listing.first_seen.desc()).limit(budget))
+             .order_by(*fresh).limit(budget))
         for row in q.all():
             if stop_check and stop_check():
                 break
