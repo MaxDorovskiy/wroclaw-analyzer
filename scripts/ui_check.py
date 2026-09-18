@@ -256,6 +256,14 @@ def run_scenario(errors, missing, served, out_dir):
         shot('deals')
         go('#/rent', 'table.grid tbody tr.clickable')
         shot('rent')
+        # обране: свій список, у власника — вибір чийого (звірка з /api/favorites/users)
+        go('#/favorites', 'table.grid tbody tr.clickable')
+        if '★ Обране' not in page.inner_text('.panel'):
+            errors.append('обране: немає заголовка розділу')
+        if 'yulia' not in page.inner_text('.panel'):
+            errors.append('обране: власник не бачить вибору чийого списку дивитись')
+        shot('favorites')
+
         go('#/contacts', 'table.grid tbody tr.clickable')
         shot('contacts')
         go('#/stats', '.recharts-line')

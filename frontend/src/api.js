@@ -54,8 +54,11 @@ export const api = {
   summary: () => req('GET', '/api/summary'),
   listings: (params) => req('GET', '/api/listings' + qs(params)),
   listing: (id) => req('GET', `/api/listings/${id}`),
+  // Звезда всегда своя: сервер правит обране того логина, который вошёл
   favorite: (id, value) =>
     req('POST', `/api/listings/${id}/favorite`, value === undefined ? {} : { value }),
+  // Чьи списки обраного есть: владельцу — все логины, Юлии — только её
+  favoriteUsers: () => req('GET', '/api/favorites/users'),
   // синхронный перевод одной карточки вне очереди (до 30 с)
   translate: (id) => req('POST', `/api/listings/${id}/translate`),
   // ручные правки: {osiedle?, condition?, note?}, null снимает правку

@@ -3,6 +3,7 @@ import Catalog from './pages/Catalog.jsx'
 import Deals from './pages/Deals.jsx'
 import Rent from './pages/Rent.jsx'
 import Contacts from './pages/Contacts.jsx'
+import Favorites from './pages/Favorites.jsx'
 import Stats from './pages/Stats.jsx'
 import Runs from './pages/Runs.jsx'
 import Settings from './pages/Settings.jsx'
@@ -17,6 +18,7 @@ const TABS = [
   ['catalog', 'Каталог'],
   ['deals', 'Вигідні'],
   ['rent', 'Оренда'],
+  ['favorites', '★ Обране'],
   ['contacts', 'Контакти'],
   ['stats', 'Статистика'],
   ['runs', 'Прогони'],
@@ -140,7 +142,7 @@ export default function App() {
   useEffect(() => { api.me().then(setMe).catch(() => setMe(null)) }, [])
 
   const Page = {
-    catalog: Catalog, deals: Deals, rent: Rent, contacts: Contacts,
+    catalog: Catalog, deals: Deals, rent: Rent, favorites: Favorites, contacts: Contacts,
     stats: Stats, runs: Runs, journal: Journal, settings: Settings,
   }[tab]
   const isViewer = me?.role === 'viewer'

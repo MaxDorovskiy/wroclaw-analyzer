@@ -86,6 +86,56 @@ def test_api_roundtrip(clean_db):
         assert c.get("/api/runs").status_code == 200
 
 
+def test_favorites_are_per_user(clean_db, monkeypatch):
+    """Обране у каждого логина своё: раньше был один флаг listings.is_favorite,
+    и снятая Юлией звезда исчезала бы у владельца."""
+    from app.models import Favorite
+
+    db = clean_db
+    seed(db, n_sale=40, n_rent=10, rnd=5, post=False)
+    # старая база: общий список обраного переносится владельцу один раз
+    legacy = db.query(Listing).order_by(Listing.id).first()
+    legacy.is_favorite = True
+    db.commit()
+    monkeypatch.setenv("WRO_WEB_USERS", "admin:s1;yulia:s2")
+    monkeypatch.delenv("WRO_WEB_PASS", raising=False)
+    with TestClient(app) as c:
+        a = {"auth": ("admin", "s1")}
+        y = {"auth": ("yulia", "s2")}
+        assert db.query(Favorite).filter_by(user="admin").count() == 1      # перенос при старте
+        ids = [x["id"] for x in c.get("/api/listings?per_page=3", **a).json()["items"]]
+        mine, hers = ids[0], ids[1]
+        assert c.post("/api/listings/%d/favorite" % mine, json={}, **a).json()["is_favorite"] is True
+        assert c.post("/api/listings/%d/favorite" % hers, json={}, **y).json()["is_favorite"] is True
+        # у каждого в списке только своё
+        aids = {x["id"] for x in c.get("/api/listings?favorites=1&per_page=50", **a).json()["items"]}
+        yids = {x["id"] for x in c.get("/api/listings?favorites=1&per_page=50", **y).json()["items"]}
+        assert mine in aids and hers not in aids
+        assert yids == {hers}
+        # звезда в строке — своя: одно и то же объявление у них разное
+        row_a = [x for x in c.get("/api/listings?per_page=3", **a).json()["items"] if x["id"] == hers][0]
+        row_y = [x for x in c.get("/api/listings?per_page=3", **y).json()["items"] if x["id"] == hers][0]
+        assert row_a["is_favorite"] is False and row_y["is_favorite"] is True
+        assert c.get("/api/listings/%d" % hers, **y).json()["is_favorite"] is True
+        assert c.get("/api/listings/%d" % hers, **a).json()["is_favorite"] is False
+        # снятие у одного не трогает другого
+        assert c.post("/api/listings/%d/favorite" % hers, json={"value": False}, **y).json()["is_favorite"] is False
+        assert c.get("/api/listings?favorites=1", **a).json()["total"] == 2   # legacy + mine
+        # владелец видит список Юлии, она его — нет
+        c.post("/api/listings/%d/favorite" % hers, json={}, **y)
+        assert {x["id"] for x in c.get("/api/listings?favorites=1&fav_user=yulia", **a).json()["items"]} == {hers}
+        assert c.get("/api/listings?favorites=1&fav_user=admin", **y).status_code == 403
+        users = c.get("/api/favorites/users", **a).json()
+        assert {u["user"]: u["count"] for u in users["users"]} == {"admin": 2, "yulia": 1}
+        assert c.get("/api/favorites/users", **y).json()["users"] == [{"user": "yulia", "count": 1}]
+        # «Обране» показывает продажу и аренду одним списком
+        rent_id = c.get("/api/listings?offer_type=rent&per_page=1", **a).json()["items"][0]["id"]
+        c.post("/api/listings/%d/favorite" % rent_id, json={}, **a)
+        got = c.get("/api/listings?favorites=1&offer_type=all&sort=fav&per_page=50", **a).json()
+        assert got["items"][0]["id"] == rent_id                              # последнее добавленное — первым
+        assert {x["offer_type"] for x in got["items"]} == {"sale", "rent"}
+
+
 def test_users_roles_and_activity(clean_db, monkeypatch):
     db = clean_db
     seed(db, n_sale=30, n_rent=10, rnd=11, post=False)

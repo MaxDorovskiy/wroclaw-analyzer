@@ -1,0 +1,7 @@
+{
+  "me": "admin",
+  "users": [
+    { "user": "admin", "count": 3 },
+    { "user": "yulia", "count": 2 }
+  ]
+}

@@ -32,7 +32,8 @@ from .config import (DATA_DIR, DB_PATH, FRONTEND_DIST, SAFE_KEYS, SCAN_HOUR_RENT
                      SCAN_HOURS_SALE, SCAN_JITTER_SEC, SCAN_MINUTE_RENT, SECRET_KEYS,
                      SECRET_MASK, VERSION)
 from .db import SessionLocal, ensure_columns, get_db
-from .models import AccessLog, Listing, PriceHistory, ScrapeRun, UnknownValue, UserAction
+from .models import (AccessLog, Favorite, Listing, PriceHistory, ScrapeRun, UnknownValue,
+                     UserAction)
 from .settings_store import get_float, get_settings, set_setting
 from .tz import KYIV, install_json_encoder
 
@@ -183,7 +184,22 @@ def seller_key(l: Listing) -> Optional[str]:
     return None
 
 
-def row_dict(l: Listing, ph: Optional[dict] = None) -> Dict:
+# ---------- обране (у каждого логина своё) ----------
+def fav_ids(db: Session, user: str, listing_ids: Optional[List[int]] = None) -> set:
+    q = select(Favorite.listing_id).where(Favorite.user == user)
+    if listing_ids is not None:
+        if not listing_ids:
+            return set()
+        q = q.where(Favorite.listing_id.in_(listing_ids))
+    return {r[0] for r in db.execute(q).all()}
+
+
+def fav_counts(db: Session) -> Dict[str, int]:
+    return {u: n for u, n in db.execute(
+        select(Favorite.user, func.count()).group_by(Favorite.user)).all()}
+
+
+def row_dict(l: Listing, ph: Optional[dict] = None, is_fav: bool = False) -> Dict:
     cond = l.condition_override or l.condition or "unknown"
     osiedle = l.osiedle_override or l.osiedle
     district = geo.district_of(osiedle) or l.district
@@ -218,7 +234,7 @@ def row_dict(l: Listing, ph: Optional[dict] = None) -> Dict:
         "yield_pct": l.yield_pct, "rent_median_pln": l.rent_median_pln,
         "rent_baseline_level": l.rent_baseline_level, "rent_baseline_count": l.rent_baseline_count,
         "price_changes": (ph or {}).get("changes", 0), "price_drop_pct": (ph or {}).get("drop_pct"),
-        "is_favorite": bool(l.is_favorite), "translated": bool(l.title_uk),
+        "is_favorite": bool(is_fav), "translated": bool(l.title_uk),
         "furnished": l.furnished, "elevator": l.elevator,
     }
     return d
@@ -291,8 +307,8 @@ def _characteristics(l: Listing) -> List[dict]:
     return out
 
 
-def full_dict(db: Session, l: Listing) -> Dict:
-    d = row_dict(l, _price_stats(db, [l.id]).get(l.id))
+def full_dict(db: Session, l: Listing, user: str = "") -> Dict:
+    d = row_dict(l, _price_stats(db, [l.id]).get(l.id), is_fav=l.id in fav_ids(db, user, [l.id]))
     d.update({
         "description_pl": l.description_pl, "description_uk": l.description_uk,
         "translated_at": l.translated_at, "translate_provider": l.translate_provider,
@@ -343,8 +359,11 @@ def _csv(v: Optional[str]) -> List[str]:
 
 
 def _apply_filters(q, p: dict):
+    # offer_type=all — продажа и аренда вместе; нужно разделу «Обране», где
+    # квартира на продажу и квартира в аренду лежат одним списком
     offer_type = p.get("offer_type") or "sale"
-    q = q.filter(Listing.offer_type == offer_type)
+    if offer_type != "all":
+        q = q.filter(Listing.offer_type == offer_type)
     if str(p.get("active", "1")) != "0":
         q = q.filter(Listing.is_active.is_(True))
     if str(p.get("dupes", "0")) != "1":
@@ -397,7 +416,10 @@ def _apply_filters(q, p: dict):
     if str(p.get("only_deals", "0")) == "1":
         q = q.filter(Listing.discount_pct >= p.get("_deal_threshold", 10.0))
     if str(p.get("favorites", "0")) == "1":
-        q = q.filter(Listing.is_favorite.is_(True))
+        # обране того логина, который смотрит (админ может смотреть чужое — fav_user).
+        # Именно join, а не подзапрос: он же даёт сортировку по дате добавления.
+        q = q.join(Favorite, Favorite.listing_id == Listing.id).filter(
+            Favorite.user == (p.get("_fav_user") or ""))
     if p.get("q"):
         like = u"%%%s%%" % p["q"].strip()
         q = q.filter(or_(Listing.title_pl.ilike(like), Listing.title_uk.ilike(like),
@@ -413,29 +435,47 @@ SORTS = {
 }
 
 
+def _fav_user_of(request: Request, p: dict) -> str:
+    """Чьё обране показываем. Своё — всегда; чужое (fav_user) — только
+    администратору: иначе Юлия читала бы список владельца."""
+    want = (p.get("fav_user") or "").strip()
+    me = current_user(request)
+    if want and want != me and not is_admin(request):
+        raise HTTPException(403, u"чуже обране доступне лише адміністратору")
+    return want or me
+
+
 @app.get("/api/listings")
 def api_listings(request: Request, db: Session = Depends(get_db)):
     p = dict(request.query_params)
     p["_deal_threshold"] = get_float(db, "deal_threshold_pct", 10.0)
+    p["_fav_user"] = _fav_user_of(request, p)
     q = _apply_filters(db.query(Listing), p)
     total = q.count()
-    sort = SORTS.get(p.get("sort") or "first_seen", Listing.first_seen)
+    key = p.get("sort") or "first_seen"
+    # «за датою додавання» — только когда список и правда обране: без join
+    # колонки Favorite в запросе нет
+    if key == "fav" and str(p.get("favorites", "0")) != "1":
+        key = "first_seen"
+    sort = Favorite.at if key == "fav" else SORTS.get(key, Listing.first_seen)
     order = (p.get("order") or ("asc" if p.get("sort") in ("price", "price_sqm") else "desc")).lower()
     q = q.order_by(sort.asc().nullslast() if order == "asc" else sort.desc().nullslast(), Listing.id.desc())
     page = max(1, int(p.get("page") or 1))
     per_page = min(200, max(1, int(p.get("per_page") or 50)))
     rows = q.offset((page - 1) * per_page).limit(per_page).all()
     ph = _price_stats(db, [r.id for r in rows])
+    favs = fav_ids(db, current_user(request), [r.id for r in rows])
     return {"total": total, "page": page, "per_page": per_page,
-            "items": [row_dict(r, ph.get(r.id)) for r in rows]}
+            "fav_user": p["_fav_user"],
+            "items": [row_dict(r, ph.get(r.id), is_fav=r.id in favs) for r in rows]}
 
 
 @app.get("/api/listings/{lid}")
-def api_listing(lid: int, db: Session = Depends(get_db)):
+def api_listing(request: Request, lid: int, db: Session = Depends(get_db)):
     l = db.get(Listing, lid)
     if l is None:
         raise HTTPException(404, u"оголошення не знайдено")
-    return full_dict(db, l)
+    return full_dict(db, l, current_user(request))
 
 
 def _log_action(db: Session, lid: int, action: str, payload: dict, request: Optional[Request] = None):
@@ -445,14 +485,32 @@ def _log_action(db: Session, lid: int, action: str, payload: dict, request: Opti
 
 @app.post("/api/listings/{lid}/favorite")
 def api_favorite(request: Request, lid: int, body: Optional[dict] = None, db: Session = Depends(get_db)):
-    l = db.get(Listing, lid)
-    if l is None:
+    """Звезда всегда своя: правим обране ТОГО, кто вошёл, — чужое не трогаем."""
+    if db.get(Listing, lid) is None:
         raise HTTPException(404)
+    user = current_user(request)
+    row = db.query(Favorite).filter_by(user=user, listing_id=lid).one_or_none()
     value = (body or {}).get("value")
-    l.is_favorite = (not l.is_favorite) if value is None else bool(value)
-    _log_action(db, lid, "favorite", {"value": l.is_favorite}, request)
+    want = (row is None) if value is None else bool(value)
+    if want and row is None:
+        db.add(Favorite(user=user, listing_id=lid))
+    elif not want and row is not None:
+        db.delete(row)
+    _log_action(db, lid, "favorite", {"value": want}, request)
     db.commit()
-    return {"is_favorite": l.is_favorite}
+    return {"is_favorite": want}
+
+
+@app.get("/api/favorites/users")
+def api_favorite_users(request: Request, db: Session = Depends(get_db)):
+    """Сколько у кого в обраному. Владельцу — по всем логинам (он выбирает,
+    чей список смотреть), остальным — только свой."""
+    counts = fav_counts(db)
+    me = current_user(request)
+    if not is_admin(request):
+        return {"me": me, "users": [{"user": me, "count": counts.get(me, 0)}]}
+    names = sorted(set(list(_users()) + list(counts)))
+    return {"me": me, "users": [{"user": u, "count": counts.get(u, 0)} for u in names]}
 
 
 @app.post("/api/listings/{lid}/translate")
@@ -494,7 +552,7 @@ def api_manual(request: Request, lid: int, body: dict, db: Session = Depends(get
         l.note = body["note"] or None
     _log_action(db, lid, "manual", body, request)
     db.commit()
-    return full_dict(db, l)
+    return full_dict(db, l, current_user(request))
 
 
 @app.post("/api/listings/{lid}/detach")
@@ -508,9 +566,16 @@ def api_detach(request: Request, lid: int, db: Session = Depends(get_db)):
 
 
 # ---------- справочники и сводка ----------
+# Когда поднялся ЭТОТ процесс. По нему safe_restart.ps1 проверяет, что сервер и
+# правда перезапустился: 18.09.2026 он рапортовал «сервер снова отвечает», хотя
+# отвечал старый процесс (остановить его без прав администратора не вышло).
+STARTED_AT = datetime.utcnow()
+
+
 @app.get("/api/health")
 def api_health():
-    return {"ok": True, "db": str(DB_PATH), "version": VERSION}
+    return {"ok": True, "db": str(DB_PATH), "version": VERSION,
+            "started_at": STARTED_AT, "pid": os.getpid()}
 
 
 @app.get("/api/geo")
@@ -710,10 +775,12 @@ def api_contacts_export(request: Request, format: str = "csv", db: Session = Dep
 def api_export(request: Request, format: str = "csv", db: Session = Depends(get_db)):
     p = dict(request.query_params)
     p["_deal_threshold"] = get_float(db, "deal_threshold_pct", 10.0)
+    p["_fav_user"] = _fav_user_of(request, p)
     q = _apply_filters(db.query(Listing), p).order_by(Listing.first_seen.desc()).limit(5000)
     rows = q.all()
     ph = _price_stats(db, [r.id for r in rows])
-    dicts = [row_dict(r, ph.get(r.id)) for r in rows]
+    favs = fav_ids(db, current_user(request), [r.id for r in rows])
+    dicts = [row_dict(r, ph.get(r.id), is_fav=r.id in favs) for r in rows]
     cols = ["id", "source", "url", "title_uk", "title_pl", "price_pln", "price_usd", "price_per_m2", "czynsz_pln",
             "area", "rooms", "floor", "floors_total", "build_year", "market_uk", "building_type_uk",
             "condition_uk", "district", "osiedle", "street", "seller_type_uk", "seller_name", "seller_phone",
@@ -924,12 +991,28 @@ def api_jobs():
             "jobs": [{"id": j.id, "next_run": j.next_run_time} for j in scheduler.get_jobs()] if scheduler.running else []}
 
 
+def migrate_favorites(db: Session) -> int:
+    """Единственный общий список обраного (listings.is_favorite) — в личный
+    список администратора. Один раз: пока таблица пуста. Сама колонка остаётся,
+    но больше не читается, иначе после выкатки старые звёзды просто исчезли бы."""
+    if db.execute(select(func.count()).select_from(Favorite)).scalar():
+        return 0
+    ids = [r[0] for r in db.execute(select(Listing.id).where(Listing.is_favorite.is_(True))).all()]
+    for lid in ids:
+        db.add(Favorite(user=ADMIN_USER, listing_id=lid))
+    if ids:
+        db.commit()
+        log.info("обране: %d записей перенесено в личный список %s", len(ids), ADMIN_USER)
+    return len(ids)
+
+
 @app.on_event("startup")
 def _startup():
     ensure_columns()
     db = SessionLocal()
     try:
         scraper.close_stale_runs(db)
+        migrate_favorites(db)
     finally:
         db.close()
     if os.environ.get("DISABLE_SCHEDULER") != "1":

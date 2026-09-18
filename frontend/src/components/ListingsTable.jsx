@@ -48,8 +48,10 @@ function GeoCell({ l }) {
 }
 
 // rent — каталог оренди: ціна це ставка на місяць, колонок знижки та
-// дохідності немає.
-export default function ListingsTable({ items, onOpen, rent = false, sort, order, onSort }) {
+// дохідності немає. mixed — продаж і оренда в одному списку («Обране»): тоді
+// «/міс» і czynsz беремо по кожному рядку окремо, інакше ставка оренди
+// виглядала б як ціна продажу.
+export default function ListingsTable({ items, onOpen, rent = false, mixed = false, sort, order, onSort }) {
   const clickSort = (field) => {
     const dir = field === sort ? (order === 'asc' ? 'desc' : 'asc') : (DEFAULT_ORDER[field] || 'desc')
     onSort(field, dir)
@@ -84,13 +86,16 @@ export default function ListingsTable({ items, onOpen, rent = false, sort, order
         </tr>
       </thead>
       <tbody>
-        {(items || []).map(l => (
+        {(items || []).map(l => {
+          const rowRent = mixed ? l.offer_type === 'rent' : rent
+          return (
           <tr key={l.id} className="clickable" onClick={() => onOpen(l.id)}>
             <td style={{ width: 28 }}><FavStar l={l} /></td>
             <td style={{ minWidth: 260 }}>
               <Bi pl={l.title_pl} uk={l.title_uk} strong />
               {l.street && <div className="muted small">{l.street}</div>}
               <div className="badges">
+                {mixed && <span className={'badge ' + (rowRent ? 'owner' : 'gray')}>{rowRent ? 'оренда' : 'продаж'}</span>}
                 <span className="badge gray">{tr('source', l.source)}</span>
                 {l.group_size > 1 && (
                   <span className="badge gray" title="Та сама квартира розміщена кілька разів — усі розміщення видно в картці">
@@ -112,8 +117,8 @@ export default function ListingsTable({ items, onOpen, rent = false, sort, order
             <td className="num">{roomsLabel(l.rooms)}</td>
             <td className="num">{fmtArea(l.area)}</td>
             <td className="num">
-              <b>{fmtPln(l.price_pln)}{rent ? '/міс' : ''}</b>
-              {rent
+              <b>{fmtPln(l.price_pln)}{rowRent ? '/міс' : ''}</b>
+              {rowRent
                 ? (l.czynsz_pln ? <div className="muted" style={{ fontSize: 10 }} title="Експлуатаційний платіж (czynsz), понад ставку">+ {fmtPln(l.czynsz_pln)} czynsz</div> : null)
                 : <div className="muted" style={{ fontSize: 10 }} title="За курсом НБП на день останнього перегляду">{fmtUsd(l.price_usd)}</div>}
             </td>
@@ -167,7 +172,7 @@ export default function ListingsTable({ items, onOpen, rent = false, sort, order
             </td>
             <td className="num muted">{fmtDate(l.posted_at || l.first_seen)}</td>
           </tr>
-        ))}
+        )})}
         {!(items || []).length && (
           <tr><td colSpan={cols} className="muted" style={{ textAlign: 'center', padding: 24 }}>
             Нічого не знайдено. Якщо база порожня — запустіть прогін у розділі «Прогони»

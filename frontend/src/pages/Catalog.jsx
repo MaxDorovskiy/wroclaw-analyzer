@@ -16,6 +16,10 @@ function fromUrl(p) {
   const out = {}
   for (const [k, v] of Object.entries(p || {})) {
     if (k === 'id' || k === 'preset') continue   // открытая карточка и пресет «Вигідних» — не фильтры
+    // Пустые значения пропускаем: адрес приходит и из памяти раздела, где у
+    // незаполненного фильтра лежит undefined, — и такой «фильтр» затирал бы
+    // пресет. Так выбор «чиє обране» молча возвращался к своему списку.
+    if (v === undefined || v === null || v === '') continue
     out[k] = NUMERIC.has(k) ? Number(v) : v
   }
   return out
@@ -27,9 +31,11 @@ function fromUrl(p) {
 const expandRooms = (s) => (s || '').split(',').filter(Boolean)
   .flatMap(r => r === '4+' ? ['4', '5', '6', '7', '8', '9', '10'] : [r]).join(',')
 
-export const toApiParams = (f, rent) => {
+// offerType переопределяет пару sale/rent: разделу «Обране» нужен `all` —
+// квартира на продажу и квартира в аренду там лежат одним списком.
+export const toApiParams = (f, rent, offerType) => {
   const { preset, ...rest } = f
-  return { ...rest, rooms: expandRooms(f.rooms), offer_type: rent ? 'rent' : 'sale' }
+  return { ...rest, rooms: expandRooms(f.rooms), offer_type: offerType || (rent ? 'rent' : 'sale') }
 }
 
 const SORTS_SALE = [
@@ -41,7 +47,9 @@ const SORTS_RENT = SORTS_SALE.filter(([k]) => k !== 'discount' && k !== 'yield')
 
 // rent — той самий каталог для оренди: offer_type=rent, ціна = ставка/міс,
 // без знижки та дохідності.
-export default function Catalog({ onOpen, preset, urlParams, onParams, geo, rent = false }) {
+export default function Catalog({ onOpen, preset, urlParams, onParams, geo, rent = false,
+                                  offerType, extraSorts, toolbar }) {
+  const mixed = offerType === 'all'
   // Порядок важен: умолчания → пресет раздела → адрес. Адрес главнее всего,
   // иначе открытая ссылка показывала бы не то, что в ней записано.
   const [f, setF] = useState({
@@ -55,7 +63,7 @@ export default function Catalog({ onOpen, preset, urlParams, onParams, geo, rent
   useEffect(() => {
     setLoading(true)
     const t = setTimeout(() => {
-      api.listings(toApiParams(f, rent))
+      api.listings(toApiParams(f, rent, offerType))
         .then(d => { setData(d); setErr(null) })
         .catch(e => { setErr(e); setData({ items: [], total: 0 }) })
         .finally(() => setLoading(false))
@@ -79,10 +87,12 @@ export default function Catalog({ onOpen, preset, urlParams, onParams, geo, rent
       onPage={n => setF({ ...f, page: n })}
       onPerPage={(v, n) => setF({ ...f, per_page: v, page: n })} />
   )
-  const exportParams = toApiParams(f, rent)
+  const exportParams = toApiParams(f, rent, offerType)
+  const sorts = [...(extraSorts || []), ...(rent ? SORTS_RENT : SORTS_SALE)]
 
   return (
     <>
+      {toolbar}
       <Filters value={f} onChange={setF} geo={geo} rent={rent} />
       <div className="panel">
         <div className="row" style={{ marginBottom: 8 }}>
@@ -93,7 +103,7 @@ export default function Catalog({ onOpen, preset, urlParams, onParams, geo, rent
           <span style={{ flex: 1 }} />
           <label className="chk">сортування:
             <select value={f.sort} onChange={e => setF({ ...f, sort: e.target.value, page: 1 })}>
-              {(rent ? SORTS_RENT : SORTS_SALE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              {sorts.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
             <select value={f.order} onChange={e => setF({ ...f, order: e.target.value, page: 1 })}>
               <option value="desc">↓ спадання</option>
@@ -109,7 +119,7 @@ export default function Catalog({ onOpen, preset, urlParams, onParams, geo, rent
             мгновенно, а строки приходят с сервера — без этого на экране стоит
             СТАРЫЙ порядок под новой стрелкой (киевские грабли 06.09.2026) */}
         <div className="wrap" style={{ opacity: loading ? 0.45 : 1, transition: 'opacity .15s' }}>
-          <ListingsTable items={data.items} onOpen={onOpen} rent={rent}
+          <ListingsTable items={data.items} onOpen={onOpen} rent={rent} mixed={mixed}
             sort={f.sort} order={f.order}
             onSort={(s, o) => setF({ ...f, sort: s, order: o, page: 1 })} />
         </div>

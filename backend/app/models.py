@@ -120,6 +120,9 @@ class Listing(Base):
     yield_reno_cost_pln = Column(Float)
 
     # --- владелец ---
+    # is_favorite остался от одного общего списка обраного (до появления логинов).
+    # Теперь обране у каждого логина своё — таблица `favorites`; колонку не
+    # удаляем, чтобы старая база открывалась, но читать её больше нельзя.
     is_favorite = Column(Boolean, default=False, index=True)
     note = Column(Text)
 
@@ -213,6 +216,21 @@ class UserAction(Base):
     action = Column(String)                  # favorite | manual | detach | translate
     payload = Column(Text)
     user = Column(String, index=True)        # кто правил (логин)
+
+
+class Favorite(Base):
+    """Обране — у КАЖДОГО логина своё.
+
+    Раньше это был один флаг `listings.is_favorite` на всю систему: Юлия
+    снимала звезду — она пропадала у владельца, и наоборот. Владелец при этом
+    видит и свой список, и её (он видит и её журнал), а она — только свой.
+    """
+    __tablename__ = "favorites"
+    id = Column(Integer, primary_key=True)
+    user = Column(String, nullable=False, index=True)
+    listing_id = Column(Integer, nullable=False, index=True)
+    at = Column(DateTime, default=datetime.utcnow, index=True)
+    __table_args__ = (Index("ix_fav_user_listing", "user", "listing_id", unique=True),)
 
 
 class UnknownValue(Base):
