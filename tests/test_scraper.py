@@ -59,6 +59,62 @@ def test_upsert_history_removal_dedup(clean_db, fixtures):
     assert db.get(Listing, mirror.id).group_size == 1 and db.get(Listing, l.id).group_size == 1
 
 
+def test_shared_render_does_not_merge_different_flats(clean_db):
+    """У квартир застройщика первая картинка — общий рендер дома. Ключ «только
+    картинка» на первом прогоне прятал 31.7% каталога (группы до 44 разных квартир)."""
+    db = clean_db
+    img = "https://ireland.apollo.olxcdn.com/v1/files/render-of-the-building/image;s=1280x1024"
+
+    def flat(sid, rooms, area, floor, price):
+        return Listing(source="otodom", source_id=sid, offer_type="sale", url="https://x/%s" % sid,
+                       rooms=rooms, area=area, floor=floor, price_pln=price, osiedle=u"Żerniki",
+                       first_image=img, is_active=True)
+
+    a, b, c, d = flat("1", 2, 35.2, 1, 423524), flat("2", 3, 68.0, 11, 1051343), \
+        flat("3", 2, 35.2, 1, 470000), flat("4", 2, 35.2, 5, 430000)
+    db.add_all([a, b, c, d])
+    db.commit()
+    stats = dedup.rebuild_groups(db)
+    for x in (a, b, c, d):
+        db.refresh(x)
+    assert a.dedup_group == c.dedup_group and a.group_size == 2      # тот же лот подан дважды (цена врозь на 11%)
+    assert stats["image"] == 1 and stats["numeric"] == 0
+    assert b.group_size == 1 and d.group_size == 1                  # другой метраж / другой этаж — другие квартиры
+    assert a.is_representative and not c.is_representative          # представитель — дешевле
+
+
+def test_run_scrape_returns_id_and_reports_skipped(clean_db, fixtures, monkeypatch):
+    """Прогон целиком на подставном источнике. Раньше `return run.id` после закрытия
+    сессии падал с DetachedInstanceError, и каждый прогон — даже успешный —
+    заканчивался в server.log строкой «прогон sale упал»."""
+    db = clean_db
+    oto, _ = _load(fixtures)
+
+    class FakeSource(Otodom):
+        name = "otodom"
+        needs_details = False
+
+        def iter_pages(self, offer_type, fetcher, start_page=1, settings=None):
+            self.skipped["outside"] = 2
+            yield 1, 1, oto
+
+    class FakeFetcher:
+        stats = {"requests": 1, "retries": 0, "blocked": 0, "browser": 0}
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(scraper, "REGISTRY", {"otodom": FakeSource})
+    monkeypatch.setattr(scraper, "get_source", lambda name: FakeSource())
+    monkeypatch.setattr(scraper, "make_fetcher", lambda settings, stop_check=None, dump=False: FakeFetcher())
+    monkeypatch.setattr(scraper, "post_process", lambda db, run=None, kind="sale": u"пересчёты пропущены")
+    run_id = scraper.run_scrape("sale", "otodom")
+    run = db.get(ScrapeRun, run_id)
+    assert run.status == "done" and run.full is True and run.seen == 2 and run.new == 2
+    assert u"otodom: не взято — вне Вроцлава 2" in run.message
+    assert scraper.is_running() is False
+
+
 def test_pause_and_watchdog(clean_db):
     db = clean_db
     until = scraper.set_pause(db, 2)

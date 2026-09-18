@@ -340,7 +340,11 @@ def run_scrape(kind: str = "sale", sources: str = "all", dump: bool = False) -> 
     run = ScrapeRun(kind=kind, source=sources, status="running", phase="start")
     db.add(run)
     db.commit()
-    _state["run_id"] = run.id
+    # id запоминаем сразу: в конце сессия уже закрыта, а commit «просрочил» атрибуты,
+    # и `return run.id` падал с DetachedInstanceError — КАЖДЫЙ прогон, даже успешный,
+    # заканчивался в server.log строкой «прогон sale упал» (замечено 18.09.2026)
+    run_id = run.id
+    _state["run_id"] = run_id
     settings = get_settings(db)
     enabled = [s.strip() for s in (settings.get("sources_enabled") or "otodom,olx").split(",") if s.strip()]
     if sources != "all":
@@ -392,12 +396,12 @@ def run_scrape(kind: str = "sale", sources: str = "all", dump: bool = False) -> 
     except Exception as e:  # noqa: BLE001
         status = "failed"
         notes.append(u"сбой: %s" % e)
-        log.error("прогон %d: %s\n%s", run.id, e, traceback.format_exc())
+        log.error("прогон %d: %s\n%s", run_id, e, traceback.format_exc())
         db.rollback()
     finally:
         fetcher.close()
         try:
-            run = db.get(ScrapeRun, run.id) or run
+            run = db.get(ScrapeRun, run_id) or run
             run.status = status
             run.finished_at = datetime.utcnow()
             run.last_beat = run.finished_at
@@ -414,7 +418,7 @@ def run_scrape(kind: str = "sale", sources: str = "all", dump: bool = False) -> 
                 _state["running"] = False
                 _state["stop"] = False
                 _state["kind"] = None
-    return run.id
+    return run_id
 
 
 def last_run(db: Session, kind: str) -> Optional[ScrapeRun]:

@@ -7,7 +7,14 @@
 1. OLX `external_url` -> код Otodom в URL (точное зеркало);
 2. те же числа: (тип, комнаты, площадь ±0 м² после округления, этаж, осиедле
    или дзельница) и цена в пределах 3%;
-3. одна и та же первая картинка на CDN (у зеркал URL совпадает буква в букву).
+3. одна и та же первая картинка на CDN — И те же комнаты, площадь, этаж. Одной
+   картинки мало: у квартир застройщика первая картинка — общий рендер дома.
+   На первом прогоне 18.09.2026 (9411 объявлений Otodom) ключ «только картинка»
+   сливал 3374 объявления в 395 групп и прятал за представителем 31.7%
+   каталога; в 347 группах площади расходились больше чем на 2 м², крупнейшая —
+   44 квартиры одного застройщика от 35 до 68 м², от 424 тыс. до 1.05 млн zł,
+   этажи 1-11. С числами — 270 объявлений (2.9%), группы не больше 4: повторные
+   подачи одного лота.
 
 Барьера, который не ошибается, нет (в Киеве проверено), поэтому есть ручное
 «інша квартира» (dedup_detached) — такие строки в склейку не идут.
@@ -78,8 +85,8 @@ def rebuild_groups(db: Session) -> Dict[str, int]:
         if r.rooms and r.area and place and r.price_pln:
             key = (r.offer_type, r.rooms, int(round(r.area)), r.floor, place)
             numeric[key].append((r.price_pln, r.id))
-        if r.first_image and len(r.first_image) > 30:
-            by_image[(r.offer_type, r.first_image)].append(r.id)
+        if r.first_image and len(r.first_image) > 30 and r.rooms and r.area:
+            by_image[(r.offer_type, r.first_image, r.rooms, int(round(r.area)), r.floor)].append(r.id)
 
     linked_mirror = 0
     for offer_type, code, lid in mirrors:
