@@ -302,17 +302,20 @@ def mark_removed(db: Session, kind: str, source: str, now: datetime) -> int:
     return res.rowcount or 0
 
 
-def post_process(db: Session, run: Optional[ScrapeRun] = None, kind: str = "sale"):
+def post_process(db: Session, run: Optional[ScrapeRun] = None, kind: str = "sale",
+                 with_translate: bool = True):
     """Пересчёты после прогона. Каждый шаг ловит своё исключение: сломанная
-    доходность не должна отменять склейку дублей."""
+    доходность не должна отменять склейку дублей. Прогон зовёт без перевода —
+    см. translate_after_run."""
     from . import analytics, dedup, fx, rent_analytics, translate
     steps = [
         ("дубли", lambda: dedup.rebuild_groups(db)),
         ("курсы", lambda: (fx.refresh(db), fx.apply_to_listings(db))),
         ("выгодность", lambda: analytics.recompute_deal_scores(db)),
         ("доходность", lambda: rent_analytics.recompute_yields(db)),
-        ("перевод", lambda: translate.translate_pending(db, stop_check=_stop_requested)),
     ]
+    if with_translate:
+        steps.append(("перевод", lambda: translate.translate_pending(db, stop_check=_stop_requested)))
     msgs = []
     for name, fn in steps:
         if _state["stop"]:
@@ -330,6 +333,31 @@ def post_process(db: Session, run: Optional[ScrapeRun] = None, kind: str = "sale
             msgs.append(u"%s: ОШИБКА %s" % (name, e))
             log.error("пересчёт «%s»: %s\n%s", name, e, traceback.format_exc())
     return u"; ".join(map(str, msgs))
+
+
+def _translate_job():
+    from . import translate
+    db = SessionLocal()
+    try:
+        log.info("перевод после прогона: %s", translate.translate_pending(db, stop_check=_stop_requested))
+    except Exception as e:  # noqa: BLE001 — поток фоновый, уронить ему некого
+        log.error("перевод после прогона: %s\n%s", e, traceback.format_exc())
+    finally:
+        db.close()
+
+
+def translate_after_run():
+    """Перевод очереди — ПОСЛЕ закрытия прогона и в своём потоке, а не шагом прогона.
+
+    Пока перевод был шагом пост-обработки, прогон числился идущим, пока не переведены
+    до 3000 заголовков и суточный потолок описаний. Замер 18.09.2026 (видеокарту делит
+    другой клиент Ollama, модели вытесняют друг друга): 20 заголовков и 20 описаний —
+    24 минуты, 36 с на запрос. Вся очередь первого дня — десятки часов, и всё это время
+    триггер продажи получал бы 409 (у него одна попытка): расписание срывалось бы на
+    сутки-двое. Скрап и перевод делят только базу (WAL, короткие транзакции), поэтому
+    идут независимо; от наложения переводов защищает замок в translate_pending, стоп и
+    пауза из интерфейса действуют как прежде (stop_check)."""
+    threading.Thread(target=_translate_job, name="translate-after-run", daemon=True).start()
 
 
 # ---------- прогон ----------
@@ -393,7 +421,7 @@ def run_scrape(kind: str = "sale", sources: str = "all", dump: bool = False) -> 
         run.full = len(completed) == len(enabled)
         flush_unknown(db, unknown)
         db.commit()
-        notes.append(post_process(db, run, kind))
+        notes.append(post_process(db, run, kind, with_translate=False))
     except StopRequested:
         status = "stopped"
         notes.append(u"остановлено (стоп/пауза)")
@@ -423,6 +451,8 @@ def run_scrape(kind: str = "sale", sources: str = "all", dump: bool = False) -> 
                 _state["running"] = False
                 _state["stop"] = False
                 _state["kind"] = None
+    if status == "done":
+        translate_after_run()
     return run_id
 
 

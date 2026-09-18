@@ -107,12 +107,22 @@ def test_run_scrape_returns_id_and_reports_skipped(clean_db, fixtures, monkeypat
     monkeypatch.setattr(scraper, "REGISTRY", {"otodom": FakeSource})
     monkeypatch.setattr(scraper, "get_source", lambda name: FakeSource())
     monkeypatch.setattr(scraper, "make_fetcher", lambda settings, stop_check=None, dump=False: FakeFetcher())
-    monkeypatch.setattr(scraper, "post_process", lambda db, run=None, kind="sale": u"пересчёты пропущены")
+    calls = []
+
+    def fake_post(db, run=None, kind="sale", with_translate=True):
+        calls.append(("post", with_translate, scraper.is_running()))
+        return u"пересчёты пропущены"
+
+    monkeypatch.setattr(scraper, "post_process", fake_post)
+    monkeypatch.setattr(scraper, "translate_after_run", lambda: calls.append(("translate", scraper.is_running())))
     run_id = scraper.run_scrape("sale", "otodom")
     run = db.get(ScrapeRun, run_id)
     assert run.status == "done" and run.full is True and run.seen == 2 and run.new == 2
     assert u"otodom: не взято — вне Вроцлава 2" in run.message
     assert scraper.is_running() is False
+    # перевод — не шаг прогона: пересчёты идут без него, а очередь стартует, когда прогон
+    # уже закрыт (иначе часы перевода на общей видеокарте держали бы 409 для триггеров)
+    assert calls == [("post", False, True), ("translate", False)]
 
 
 def test_pause_and_watchdog(clean_db):
