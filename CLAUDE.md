@@ -1,7 +1,9 @@
 # Wrocław Analyzer — как работать с этим проектом
 
-Младший брат киевского RE Analyzer (корень репозитория). Общего кода нет —
-общие только решения, которые там окупились. Подробности: `README.md`,
+Младший брат киевского RE Analyzer (репозиторий flatfy-analyzer). Общего кода
+нет — общие только решения, которые там окупились. Свой репозиторий:
+https://github.com/MaxDorovskiy/wroclaw-analyzer (перенесён из папки
+`wroclaw-analyzer/` flatfy-analyzer 18.09.2026 с историей). Подробности: `README.md`,
 `docs/ARCHITECTURE.md`, `docs/API.md`, `DEFERRED.md`.
 
 ## Правила, которые дороже всего нарушать

@@ -1,0 +1,35 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend-demo (mac/linux)",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["-c", "[ -f data/demo.db ] || .venv/bin/python scripts/demo_seed.py --db data/demo.db; exec .venv/bin/uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port ${PORT:-8021}"],
+      "autoPort": true,
+      "port": 8021,
+      "env": { "DISABLE_SCHEDULER": "1", "WRO_DB": "data/demo.db" }
+    },
+    {
+      "name": "backend-demo (windows)",
+      "runtimeExecutable": "powershell.exe",
+      "runtimeArgs": ["-NoProfile", "-Command", "if (-not (Test-Path data\\demo.db)) { .\\.venv\\Scripts\\python.exe scripts\\demo_seed.py --db data\\demo.db }; .\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8021"],
+      "port": 8021,
+      "env": { "DISABLE_SCHEDULER": "1", "WRO_DB": "data/demo.db" }
+    },
+    {
+      "name": "backend-on-copy (windows)",
+      "runtimeExecutable": "powershell.exe",
+      "runtimeArgs": ["-NoProfile", "-Command", ".\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8021"],
+      "port": 8021,
+      "env": { "DISABLE_SCHEDULER": "1", "WRO_DB": "data/wro-copy.db" }
+    },
+    {
+      "name": "frontend-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5175", "--strictPort"],
+      "cwd": "frontend",
+      "port": 5175,
+      "env": { "VITE_API": "http://127.0.0.1:8021" }
+    }
+  ]
+}

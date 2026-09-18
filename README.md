@@ -5,6 +5,7 @@
 срезы по осиедле, индекс цен, карточки контактов — с украинским переводом
 рядом с польским оригиналом. Бэкенд FastAPI, фронтенд React/Vite, интерфейс
 на украинском. Стоит на ПК с Windows 11 (см. `deploy/windows/README.md`).
+Репозиторий: https://github.com/MaxDorovskiy/wroclaw-analyzer.
 
 Документы: `docs/RESEARCH.md` (площадки, анти-бот, перевод, цифры рынка),
 `docs/ARCHITECTURE.md`, `docs/API.md` (контракт), `docs/SPEC.md` (ТЗ),
