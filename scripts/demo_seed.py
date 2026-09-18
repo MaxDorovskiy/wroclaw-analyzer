@@ -142,7 +142,9 @@ def seed(db, n_sale=600, n_rent=250, rnd=1, post=True):
                 db.add(PriceHistory(listing_id=l.id, price_pln=price, seen_at=posted + timedelta(days=10)))
             # одно заведомо дешёвое объявление для теста выгодности
             if offer_type == "sale" and not cheap_marked and cond == "unknown" and rooms == 2 and BASE_SQM[os_] < 13000 and l.is_active:
-                l.price_pln = round(price * 0.8, -3)
+                # скидка задаётся от «честной» цены ячейки БЕЗ шума, иначе объявление с
+                # шумом +14% после среза 20% дешевле медианы лишь на 6% (так и падал тест)
+                l.price_pln = round(BASE_SQM[os_] * COND_FACTOR[cond] * band_adj * area * 0.75, -3)
                 l.price_per_m2 = round(l.price_pln / area, 2)
                 l.note = "seed:cheap"
                 cheap_marked = True
