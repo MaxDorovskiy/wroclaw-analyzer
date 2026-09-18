@@ -37,6 +37,24 @@ def test_cache_and_chunks(clean_db):
     assert st["pending_titles"] == 0 and st["done_total"] == 2
 
 
+def test_cache_is_scoped_to_prompt_version(clean_db, monkeypatch):
+    """После правки подсказки старый перевод из кэша отдаваться не должен — иначе
+    PROMPT_VERSION ничего не меняет, и кнопка «Перекласти» возвращает прежний текст."""
+    db = clean_db
+    p = Fake()
+    a = Listing(source="olx", source_id="1", offer_type="sale", title_pl=u"Mieszkanie na 1. piętrze", is_active=True)
+    db.add(a)
+    db.commit()
+    translate.translate_listing(db, a, p, with_description=False)
+    assert p.calls == 1 and a.translate_version == translate.PROMPT_VERSION
+    monkeypatch.setattr(translate, "PROMPT_VERSION", "next")
+    translate.translate_listing(db, a, p, force=True, with_description=False)
+    assert p.calls == 2 and a.translate_version == "next"                     # кэш прежней версии не подошёл
+    translate.translate_listing(db, a, p, force=True, with_description=False)
+    assert p.calls == 2                                                       # а в пределах версии — из кэша
+    assert db.query(Translation).count() == 2                                 # прежняя строка осталась
+
+
 def test_queue_takes_freshly_posted_first(clean_db, monkeypatch):
     """Первый прогон вставляет объявления в порядке страниц выдачи, и «свежее по
     first_seen» — это последняя страница, то есть самое старое. Очередь идёт по дате подачи."""

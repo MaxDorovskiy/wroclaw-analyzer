@@ -464,7 +464,9 @@ def api_translate_one(request: Request, lid: int, db: Session = Depends(get_db))
     if provider is None:
         raise HTTPException(400, u"провайдер перекладу не налаштований (Налаштування)")
     try:
-        res = translate.translate_listing(db, l, provider, force=not l.description_uk)
+        # перевод прежней версии подсказки кнопка обновляет: иначе устаревшее не освежить
+        stale = l.translate_version != translate.PROMPT_VERSION
+        res = translate.translate_listing(db, l, provider, force=(not l.description_uk) or stale)
     except Exception as e:  # noqa: BLE001
         db.rollback()
         raise HTTPException(502, u"перекладач не відповів: %s" % e)
