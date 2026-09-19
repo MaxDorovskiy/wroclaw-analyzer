@@ -142,6 +142,7 @@ T.action = {
   translate: 'переклад',
   export: 'експорт',
   contacts: 'контакти',
+  presentation: 'презентація PDF',
   other: 'інше',
 }
 

@@ -233,6 +233,23 @@ class Favorite(Base):
     __table_args__ = (Index("ix_fav_user_listing", "user", "listing_id", unique=True),)
 
 
+class UserProfile(Base):
+    """Візитка ріелтора: чиї контакти підставляти в PDF-презентацію.
+
+    У Юлії вони свої — вона надсилає підбірки клієнтам від себе, і телефон
+    власника в такому файлі був би помилкою.
+    """
+    __tablename__ = "user_profiles"
+    user = Column(String, primary_key=True)
+    display_name = Column(String)
+    phone = Column(String)
+    email = Column(String)
+    agency = Column(String)
+    about = Column(Text)                       # рядок під контактами
+    pres_lang = Column(String, default="uk")   # мова презентації за замовчуванням
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
 class UnknownValue(Base):
     """Значения структурных полей, которых нет в словаре i18n — для пополнения."""
     __tablename__ = "unknown_values"

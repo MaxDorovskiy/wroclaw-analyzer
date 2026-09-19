@@ -27,13 +27,13 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
-from . import analytics, dedup, fx, geo, i18n, rent_analytics, scraper, translate
+from . import analytics, dedup, fx, geo, i18n, presentation, rent_analytics, scraper, translate
 from .config import (DATA_DIR, DB_PATH, FRONTEND_DIST, SAFE_KEYS, SCAN_HOUR_RENT,
                      SCAN_HOURS_SALE, SCAN_JITTER_SEC, SCAN_MINUTE_RENT, SECRET_KEYS,
                      SECRET_MASK, VERSION)
 from .db import SessionLocal, ensure_columns, get_db
 from .models import (AccessLog, Favorite, Listing, PriceHistory, ScrapeRun, UnknownValue,
-                     UserAction)
+                     UserAction, UserProfile)
 from .settings_store import get_float, get_settings, set_setting
 from .tz import KYIV, install_json_encoder
 
@@ -99,6 +99,8 @@ def _classify(method: str, path: str):
         return "search", None
     if path.startswith("/api/export") or path.startswith("/api/contacts/export"):
         return "export", None
+    if path.startswith("/api/presentation"):
+        return "presentation", None
     if path.startswith("/api/contacts"):
         return "contacts", None
     if method == "POST" and path.startswith("/api/") and not path.startswith(_NOISE):
@@ -499,6 +501,101 @@ def api_favorite(request: Request, lid: int, body: Optional[dict] = None, db: Se
     _log_action(db, lid, "favorite", {"value": want}, request)
     db.commit()
     return {"is_favorite": want}
+
+
+# ---------- візитка ріелтора і PDF-презентації ----------
+PROFILE_FIELDS = ("display_name", "phone", "email", "agency", "about", "pres_lang")
+
+
+def profile_dict(db: Session, user: str) -> Dict:
+    row = db.get(UserProfile, user)
+    d = {"user": user, "is_admin": user == ADMIN_USER}
+    for f in PROFILE_FIELDS:
+        d[f] = getattr(row, f) if row else None
+    d["display_name"] = d["display_name"] or user
+    d["pres_lang"] = d["pres_lang"] or "uk"
+    return d
+
+
+@app.get("/api/profile")
+def api_profile(request: Request, db: Session = Depends(get_db)):
+    """Своя визитка. Чужую не отдаём никому: это личные контакты."""
+    return profile_dict(db, current_user(request))
+
+
+@app.post("/api/profile")
+def api_profile_save(request: Request, body: dict, db: Session = Depends(get_db)):
+    user = current_user(request)
+    row = db.get(UserProfile, user)
+    if row is None:
+        row = UserProfile(user=user)
+        db.add(row)
+    for f in PROFILE_FIELDS:
+        if f in (body or {}):
+            v = body[f]
+            setattr(row, f, (str(v).strip() or None) if v is not None else None)
+    if row.pres_lang not in ("uk", "pl"):
+        row.pres_lang = "uk"
+    row.updated_at = datetime.utcnow()
+    db.commit()
+    return profile_dict(db, user)
+
+
+@app.post("/api/presentation")
+def api_presentation(request: Request, body: dict, db: Session = Depends(get_db)):
+    """PDF-подборка выбранных объявлений с контактами ОТПРАВИТЕЛЯ.
+
+    Синхронно: файл нужен здесь и сейчас, а Chromium верстает его за секунды.
+    Ручка объявлена обычным `def`, поэтому FastAPI держит её в рабочем потоке —
+    синхронный Playwright внутри цикла событий не работает."""
+    ids = [int(x) for x in (body or {}).get("ids") or []]
+    if not ids:
+        raise HTTPException(400, u"не вибрано жодного оголошення")
+    if len(ids) > presentation.MAX_ITEMS:
+        raise HTTPException(400, u"забагато оголошень: максимум %d" % presentation.MAX_ITEMS)
+    prof = profile_dict(db, current_user(request))
+    lang = (body.get("lang") or prof["pres_lang"] or "uk").lower()
+    if lang not in ("uk", "pl"):
+        raise HTTPException(400, u"мова: uk або pl")
+    rows = db.query(Listing).filter(Listing.id.in_(ids)).all()
+    if not rows:
+        raise HTTPException(404, u"оголошення не знайдені")
+    order = {lid: i for i, lid in enumerate(ids)}        # порядок — как выбрал человек
+    rows.sort(key=lambda r: order.get(r.id, 10 ** 6))
+    # Украинская подборка с польским описанием бесполезна клиенту, а очередь
+    # дойдёт до этих объявлений через дни. Переводим отобранное прямо сейчас:
+    # их единицы, и это ровно тот момент, когда перевод нужен.
+    missed = 0
+    if lang == "uk" and (body.get("translate_missing", True)):
+        prov = translate.get_provider(get_settings(db))
+        for r in rows:
+            if prov is None:
+                break
+            if r.title_uk and (r.description_uk or not r.description_pl):
+                continue
+            try:
+                translate.translate_listing(db, r, prov)
+            except Exception as e:  # noqa: BLE001 — без перевода отдадим оригинал
+                missed += 1
+                log.warning("презентация: перевод %s не вышел: %s", r.id, e)
+    if missed:
+        log.warning("презентация: %d оголошень пішли мовою оригіналу", missed)
+    html_text = presentation.build_html(rows, prof, lang, body.get("title"), body.get("comment"))
+    try:
+        pdf = presentation.render_pdf(html_text)
+    except Exception as e:  # noqa: BLE001 — без Chromium файл не собрать
+        log.error("презентация: %s", e)
+        raise HTTPException(500, u"не вдалося зібрати PDF: %s. Потрібен Chromium "
+                                 u"(playwright install chromium)" % e)
+    for lid in ids:
+        _log_action(db, lid, "presentation", {"lang": lang, "n": len(rows)}, request)
+    db.commit()
+    name = u"%s-%s.pdf" % (u"pidbirka" if lang == "uk" else u"oferta",
+                           datetime.now().strftime("%Y%m%d-%H%M"))
+    return Response(pdf, media_type="application/pdf", headers={
+        "Content-Disposition": "attachment; filename=%s" % name,
+        "Content-Length": str(len(pdf)),
+    })
 
 
 @app.get("/api/favorites/users")
@@ -934,7 +1031,8 @@ def api_settings_save(body: dict, db: Session = Depends(get_db)):
 ACTION_UK = {"view_card": u"відкрив(ла) картку", "search": u"шукав(ла) в каталозі",
              "favorite": u"обране", "note": u"нотатка", "manual": u"ручна правка",
              "detach": u"«інша квартира»", "translate": u"переклад картки",
-             "export": u"експорт", "contacts": u"контакти", "other": u"дія"}
+             "export": u"експорт", "contacts": u"контакти", "presentation": u"презентація PDF",
+             "other": u"дія"}
 
 
 @app.get("/api/activity", dependencies=[Depends(require_admin)])

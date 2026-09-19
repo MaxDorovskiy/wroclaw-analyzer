@@ -51,7 +51,13 @@ function GeoCell({ l }) {
 // дохідності немає. mixed — продаж і оренда в одному списку («Обране»): тоді
 // «/міс» і czynsz беремо по кожному рядку окремо, інакше ставка оренди
 // виглядала б як ціна продажу.
-export default function ListingsTable({ items, onOpen, rent = false, mixed = false, sort, order, onSort }) {
+export default function ListingsTable({ items, onOpen, rent = false, mixed = false, sort, order, onSort,
+                                        sel, onSel }) {
+  // Вибір галочками — для PDF-підбірки клієнту. Окремо від зірочки: обране
+  // живе довго, а підбірка збирається під одного клієнта і тут же скидається.
+  const picked = new Set(sel || [])
+  const pageIds = (items || []).map(x => x.id)
+  const allPicked = pageIds.length > 0 && pageIds.every(id => picked.has(id))
   const clickSort = (field) => {
     const dir = field === sort ? (order === 'asc' ? 'desc' : 'asc') : (DEFAULT_ORDER[field] || 'desc')
     onSort(field, dir)
@@ -63,12 +69,18 @@ export default function ListingsTable({ items, onOpen, rent = false, mixed = fal
       {children}{onSort && field === sort ? (order === 'asc' ? ' ▲' : ' ▼') : ''}
     </th>
   )
-  const cols = rent ? 12 : 14
+  const cols = (rent ? 12 : 14) + (onSel ? 1 : 0)
 
   return (
     <table className="grid">
       <thead>
         <tr>
+          {onSel && (
+            <th style={{ width: 26 }} title="Вибрати всі на сторінці для презентації">
+              <input type="checkbox" checked={allPicked}
+                onChange={() => onSel(pageIds, !allPicked)} />
+            </th>
+          )}
           <th></th>
           <th>Оголошення</th>
           <th>Осиедле · дзельниця</th>
@@ -90,6 +102,12 @@ export default function ListingsTable({ items, onOpen, rent = false, mixed = fal
           const rowRent = mixed ? l.offer_type === 'rent' : rent
           return (
           <tr key={l.id} className="clickable" onClick={() => onOpen(l.id)}>
+            {onSel && (
+              <td style={{ width: 26 }} onClick={e => e.stopPropagation()}>
+                <input type="checkbox" checked={picked.has(l.id)} onChange={() => onSel([l.id])}
+                  title="Додати до презентації" />
+              </td>
+            )}
             <td style={{ width: 28 }}><FavStar l={l} /></td>
             <td style={{ minWidth: 260 }}>
               <Bi pl={l.title_pl} uk={l.title_uk} strong />

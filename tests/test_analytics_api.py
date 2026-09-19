@@ -136,6 +136,57 @@ def test_favorites_are_per_user(clean_db, monkeypatch):
         assert {x["offer_type"] for x in got["items"]} == {"sale", "rent"}
 
 
+def test_profile_and_presentation(clean_db, monkeypatch):
+    """Підбірка для клієнта: контакти — ТОГО, хто надсилає, мова на вибір.
+    Chromium у тесті не запускаємо: перевіряємо HTML, який іде йому на вхід."""
+    from app import presentation
+    from app.models import UserProfile
+
+    db = clean_db
+    seed(db, n_sale=30, n_rent=10, rnd=9, post=False)
+    monkeypatch.setenv("WRO_WEB_USERS", "admin:s1;yulia:s2")
+    monkeypatch.delenv("WRO_WEB_PASS", raising=False)
+    made = {}
+    monkeypatch.setattr(presentation, "render_pdf", lambda h, **kw: made.setdefault("html", h) and b"" or b"%PDF-1.4 fake")
+    with TestClient(app) as c:
+        a, y = {"auth": ("admin", "s1")}, {"auth": ("yulia", "s2")}
+        # визитка: своя у каждого, чужую никто не получает
+        assert c.get("/api/profile", **y).json()["display_name"] == "yulia"
+        saved = c.post("/api/profile", json={
+            "display_name": u"Юлія Коваленко", "phone": "+48600100200",
+            "email": "y@example.com", "agency": u"Оренда", "pres_lang": "pl"}, **y).json()
+        assert saved["phone"] == "+48600100200" and saved["pres_lang"] == "pl"
+        assert c.get("/api/profile", **a).json()["display_name"] == "admin"      # владельца не тронули
+        assert db.get(UserProfile, "yulia").email == "y@example.com"
+
+        rent = c.get("/api/listings?offer_type=rent&per_page=2", **y).json()["items"]
+        sale = c.get("/api/listings?offer_type=sale&per_page=1", **y).json()["items"]
+        ids = [rent[1]["id"], sale[0]["id"], rent[0]["id"]]
+        r = c.post("/api/presentation", json={"ids": ids, "lang": "uk",
+                                              "comment": u"Пані Олено, ось варіанти"}, **y)
+        assert r.status_code == 200 and r.content.startswith(b"%PDF")
+        assert "attachment" in r.headers["content-disposition"]
+        html = made["html"]
+        assert u"Юлія Коваленко" in html and "+48600100200" in html and u"Оренда" in html
+        assert u"Пані Олено" in html
+        assert u"Підбірка квартир" in html and u"Кімнат" in html          # украинские подписи
+        # порядок — как выбрали, а не как в базе
+        assert [html.index(u"%d / 3" % i) for i in (1, 2, 3)] == sorted(
+            [html.index(u"%d / 3" % i) for i in (1, 2, 3)])
+        # польская версия: подписи и тексты площадки
+        made.clear()
+        c.post("/api/presentation", json={"ids": ids[:1], "lang": "pl"}, **y)
+        assert u"Wybrane mieszkania" in made["html"] and u"Pokoje" in made["html"]
+        assert u"Кімнат" not in made["html"]
+        # границы
+        assert c.post("/api/presentation", json={"ids": []}, **y).status_code == 400
+        assert c.post("/api/presentation", json={"ids": ids, "lang": "de"}, **y).status_code == 400
+        assert c.post("/api/presentation", json={"ids": list(range(1, 40))}, **y).status_code == 400
+        # действие видно владельцу в журнале
+        acts = [x["action"] for x in c.get("/api/activity?user=yulia", **a).json()["rows"]]
+        assert "presentation" in acts
+
+
 def test_users_roles_and_activity(clean_db, monkeypatch):
     db = clean_db
     seed(db, n_sale=30, n_rent=10, rnd=11, post=False)

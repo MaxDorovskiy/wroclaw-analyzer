@@ -98,6 +98,40 @@ export const api = {
   me: () => req('GET', '/api/me'),
   // журнал действий пользователей, только admin
   activity: (params) => req('GET', '/api/activity' + qs(params)),
+  // Візитка ріелтора: ім'я, телефон, пошта — підставляються в PDF-підбірку.
+  // Своя у кожного логіна; чужу сервер не віддає.
+  profile: () => req('GET', '/api/profile'),
+  profileSave: (body) => req('POST', '/api/profile', body),
+  // PDF-підбірка: відповідь — файл, тому не через req() (він чекає JSON)
+  presentation: async (body) => {
+    const r = await fetch(BASE + '/api/presentation', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    })
+    if (!r.ok) {
+      let msg = r.statusText
+      try { const d = (await r.json()).detail; if (d) msg = typeof d === 'string' ? d : JSON.stringify(d) }
+      catch { /* тіло не JSON */ }
+      const err = new Error(msg || `HTTP ${r.status}`)
+      err.status = r.status
+      throw err
+    }
+    const cd = r.headers.get('Content-Disposition') || ''
+    const m = /filename=([^;]+)/i.exec(cd)
+    return { blob: await r.blob(), filename: (m ? m[1] : 'pidbirka.pdf').trim().replace(/"/g, '') }
+  },
+}
+
+// Отдать файл пользователю: ссылка на blob живёт до перезагрузки, поэтому
+// сразу после клика её отзываем, иначе память держит десятки мегабайт PDF.
+export function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 10000)
 }
 
 // Телефон в буфер обмена. navigator.clipboard есть только в безопасном

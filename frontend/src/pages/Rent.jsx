@@ -68,10 +68,11 @@ function YieldTop({ goTo }) {
   )
 }
 
-export default function Rent({ onOpen, urlParams, onParams, geo, goTo }) {
+export default function Rent({ onOpen, urlParams, onParams, geo, goTo, sel, onSel }) {
   return (
     <>
-      <Catalog rent onOpen={onOpen} urlParams={urlParams} onParams={onParams} geo={geo} />
+      <Catalog rent onOpen={onOpen} urlParams={urlParams} onParams={onParams} geo={geo}
+        sel={sel} onSel={onSel} />
       <YieldTop goTo={goTo} />
     </>
   )

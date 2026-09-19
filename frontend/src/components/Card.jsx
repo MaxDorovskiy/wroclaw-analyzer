@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { api, fmtNum, fmtPln, fmtUsd, fmtEur, fmtDate, fmtDateTime, errorText } from '../api.js'
 import { useLang, tr, T, dealTitle, yieldTitle, roomsLabel, floorText, FLOOR_HINT, biText } from '../i18n.js'
 import Bi from './Bi.jsx'
+import Gallery from './Gallery.jsx'
 import Phone from './Phone.jsx'
 import ApiError from './ApiError.jsx'
 import { useFlash } from './Toast.jsx'
@@ -283,15 +284,7 @@ export default function Card({ id, onClose, onOpen, geo, goTo }) {
               )}
             </div>
 
-            {(l.images || []).length > 0 && (
-              <div className="gallery">
-                {l.images.map((src, i) => (
-                  <a key={i} href={src} target="_blank" rel="noreferrer" title="Відкрити фото в новій вкладці">
-                    <img src={src} loading="lazy" alt="" />
-                  </a>
-                ))}
-              </div>
-            )}
+            <Gallery images={l.images} />
 
             <h3>Опис</h3>
             <TextCols l={l} />

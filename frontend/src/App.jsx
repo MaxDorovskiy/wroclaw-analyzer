@@ -11,6 +11,8 @@ import Journal from './pages/Journal.jsx'
 import Card from './components/Card.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import LangSwitch from './components/LangSwitch.jsx'
+import Profile from './components/Profile.jsx'
+import SelectionBar from './components/SelectionBar.jsx'
 import { api, fmtNum, fmtDateTime } from './api.js'
 import { LangContext, readLang, writeLang } from './i18n.js'
 
@@ -78,6 +80,20 @@ export default function App() {
   const [extNav, setExtNav] = useState(0)
   const [lang, setLangState] = useState(readLang)
   const setLang = (v) => { setLangState(v); writeLang(v) }
+  // Вибір галочками для PDF-підбірки. Живе НАД розділами: ріелтор набирає
+  // квартири і в «Обраному», і в «Оренді», а потім одним файлом шле клієнту.
+  // Порядок зберігаємо — у файлі об'єкти йдуть так, як їх вибрали.
+  const [sel, setSel] = useState([])
+  const [profile, setProfile] = useState(null)
+  const [profileOpen, setProfileOpen] = useState(false)
+  // ids — масив; on=true/false задає дію явно (галочка «всі на сторінці»),
+  // без неї одиночний клік перемикає
+  const toggleSel = (ids, on) => setSel(prev => {
+    const add = on === undefined ? !prev.includes(ids[0]) : on
+    if (add) return prev.concat(ids.filter(id => !prev.includes(id)))
+    const drop = new Set(ids)
+    return prev.filter(id => !drop.has(id))
+  })
 
   // push — новая запись в истории (смена раздела, карточка: «назад» должно
   // возвращать оттуда); replace — правка текущей (фильтры, страница), иначе
@@ -140,6 +156,9 @@ export default function App() {
   // от владельца «Налаштування» из-за 404 после выкатки — та самая ловушка.
   // Ограничение здесь только косметическое, настоящее — 403 на сервере.
   useEffect(() => { api.me().then(setMe).catch(() => setMe(null)) }, [])
+  // Візитка для PDF-підбірки. Старий сервер ручки не має — тоді просто немає
+  // контактів у файлі, а не біла сторінка.
+  useEffect(() => { api.profile().then(setProfile).catch(() => setProfile(null)) }, [])
 
   const Page = {
     catalog: Catalog, deals: Deals, rent: Rent, favorites: Favorites, contacts: Contacts,
@@ -179,12 +198,17 @@ export default function App() {
           {fx?.USD && <span title={'Курс НБП ' + (fx.date || '')}>$ {fmtNum(fx.USD, 2)} · € {fmtNum(fx.EUR, 2)} zł</span>}
           {lastRun && <span title="Кінець останнього прогону продажу">оновлено {fmtDateTime(lastRun, { year: undefined })}</span>}
           <LangSwitch />
+          {/* Логін, а не ім'я з візитки: у шапці має бути видно, ХТО увійшов —
+              власник за цим і стежить. Візитка — у підказці й за кліком. */}
           {me?.user && (
-            <span className="small" title={isViewer
-              ? 'Роль: перегляд — прогони, налаштування і журнал недоступні'
-              : 'Роль: адміністратор'}>
+            <button type="button" className="userchip" onClick={() => setProfileOpen(true)}
+              title={(isViewer
+                ? 'Роль: перегляд — прогони, налаштування і журнал недоступні'
+                : 'Роль: адміністратор')
+                + (profile?.display_name && profile.display_name !== me.user ? '. Візитка: ' + profile.display_name : '')
+                + '. Натисніть, щоб змінити візитку для PDF-підбірок'}>
               👤 <b>{me.user}</b>{isViewer ? ' · перегляд' : ''}
-            </span>
+            </button>
           )}
         </div>
       </div>
@@ -201,11 +225,18 @@ export default function App() {
           ) : (
             <Page key={(jump ? 'j' + jump.at : tab) + '#' + extNav}
               onOpen={openCard} summary={summary} geo={geo} goTo={goTo} me={me}
+              sel={sel} onSel={toggleSel}
               urlParams={params} onParams={onParams} />
           )}
         </ErrorBoundary>
       </div>
       {openId && <Card id={openId} onOpen={openCard} onClose={closeCard} geo={geo} goTo={goTo} />}
+      <SelectionBar ids={sel} onClear={() => setSel([])} profile={profile}
+        onEditProfile={() => setProfileOpen(true)} />
+      {profileOpen && (
+        <Profile profile={profile || { user: me?.user }} onSaved={setProfile}
+          onClose={() => setProfileOpen(false)} />
+      )}
     </LangContext.Provider>
   )
 }

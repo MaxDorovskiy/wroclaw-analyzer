@@ -7,7 +7,7 @@ import Catalog from './Catalog.jsx'
 // зірочка при цьому лишається своя, тож знахідку Юлії можна забрати собі.
 const SORTS = [['fav', 'за датою додавання'], ['posted', 'за датою подачі']]
 
-export default function Favorites({ onOpen, geo, urlParams, onParams, me }) {
+export default function Favorites({ onOpen, geo, urlParams, onParams, me, sel, onSel }) {
   const [users, setUsers] = useState(null)
   const [who, setWho] = useState((urlParams && urlParams.fav_user) || '')
   const isAdmin = me && me.role === 'admin'
@@ -54,7 +54,7 @@ export default function Favorites({ onOpen, geo, urlParams, onParams, me }) {
     // key — чтобы смена «чиє» перемонтировала каталог с новым пресетом;
     // пустая строка ключом не годится, отсюда 'me'
     <Catalog key={who || 'me'} onOpen={onOpen} geo={geo} offerType="all" extraSorts={SORTS}
-      urlParams={rest} onParams={onParams} toolbar={toolbar}
+      sel={sel} onSel={onSel} urlParams={rest} onParams={onParams} toolbar={toolbar}
       preset={{ favorites: 1, fav_user: who || undefined, sort: 'fav', order: 'desc' }} />
   )
 }

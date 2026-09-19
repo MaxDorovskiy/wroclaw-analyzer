@@ -12,7 +12,7 @@ export const PRESETS = [
   ['y6', 'Дохідність ≥ 6%', { yield_min: 6, sort: 'yield', order: 'desc' }],
 ]
 
-export default function Deals({ onOpen, urlParams, onParams, geo }) {
+export default function Deals({ onOpen, urlParams, onParams, geo, sel, onSel }) {
   const current = PRESETS.find(p => p[0] === urlParams?.preset) || PRESETS[0]
   const [key, , params] = current
   return (
@@ -25,7 +25,7 @@ export default function Deals({ onOpen, urlParams, onParams, geo }) {
       </div>
       {/* key — чтобы каталог перемонтировался и взял новый пресет: свои
           фильтры он держит в состоянии и от пропсов уже не зависит */}
-      <Catalog key={key} onOpen={onOpen} preset={params} geo={geo}
+      <Catalog key={key} onOpen={onOpen} preset={params} geo={geo} sel={sel} onSel={onSel}
         urlParams={urlParams} onParams={p => onParams({ ...p, preset: key })} />
     </>
   )

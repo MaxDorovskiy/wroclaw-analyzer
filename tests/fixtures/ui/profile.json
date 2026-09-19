@@ -1,0 +1,10 @@
+{
+  "user": "admin",
+  "is_admin": true,
+  "display_name": "Максим",
+  "phone": "+48 600 100 200",
+  "email": "owner@example.com",
+  "agency": "Власник системи",
+  "about": null,
+  "pres_lang": "uk"
+}

@@ -48,7 +48,7 @@ const SORTS_RENT = SORTS_SALE.filter(([k]) => k !== 'discount' && k !== 'yield')
 // rent — той самий каталог для оренди: offer_type=rent, ціна = ставка/міс,
 // без знижки та дохідності.
 export default function Catalog({ onOpen, preset, urlParams, onParams, geo, rent = false,
-                                  offerType, extraSorts, toolbar }) {
+                                  offerType, extraSorts, toolbar, sel, onSel }) {
   const mixed = offerType === 'all'
   // Порядок важен: умолчания → пресет раздела → адрес. Адрес главнее всего,
   // иначе открытая ссылка показывала бы не то, что в ней записано.
@@ -120,7 +120,7 @@ export default function Catalog({ onOpen, preset, urlParams, onParams, geo, rent
             СТАРЫЙ порядок под новой стрелкой (киевские грабли 06.09.2026) */}
         <div className="wrap" style={{ opacity: loading ? 0.45 : 1, transition: 'opacity .15s' }}>
           <ListingsTable items={data.items} onOpen={onOpen} rent={rent} mixed={mixed}
-            sort={f.sort} order={f.order}
+            sel={sel} onSel={onSel} sort={f.sort} order={f.order}
             onSort={(s, o) => setF({ ...f, sort: s, order: o, page: 1 })} />
         </div>
         {pager(false)}
