@@ -220,7 +220,7 @@ def row_dict(l: Listing, ph: Optional[dict] = None, is_fav: bool = False) -> Dic
         "condition_src": "manual" if l.condition_override else l.condition_src,
         "district": district, "district_uk": geo.district_uk(district),
         "osiedle": osiedle, "osiedle_uk": geo.osiedle_uk(osiedle),
-        "osiedle_src": "manual" if l.osiedle_override else "auto",
+        "osiedle_src": "manual" if l.osiedle_override else (l.osiedle_src or "source"),
         "street": l.street, "lat": l.lat, "lon": l.lon,
         "seller_type": l.seller_type, "seller_type_uk": i18n.uk("seller_type", l.seller_type),
         "seller_name": l.seller_name, "seller_phone": l.seller_phone, "seller_id": l.seller_id,
@@ -1109,15 +1109,20 @@ def _startup():
     ensure_columns()
     db = SessionLocal()
     try:
-        scraper.close_stale_runs(db)
+        scraper.close_stale_runs(db, orphans=True)
         migrate_favorites(db)
     finally:
         db.close()
+    # Сторож живёт ВСЕГДА: он не скрапит, а закрывает зависшие строки. Раньше он
+    # выключался вместе с планировщиком (DISABLE_SCHEDULER=1 — это бой), и прогон,
+    # оборванный перезапуском 20.09.2026, висел «running» трое суток.
+    watchdog = BackgroundScheduler(timezone=KYIV)
+    watchdog.add_job(_watchdog, "interval", minutes=10, id="watchdog")
+    watchdog.start()
     if os.environ.get("DISABLE_SCHEDULER") != "1":
         for h in SCAN_HOURS_SALE:
             scheduler.add_job(lambda: _sched_scrape("sale"), CronTrigger(hour=h, minute=0), id="sale_%d" % h)
         scheduler.add_job(lambda: _sched_scrape("rent"), CronTrigger(hour=SCAN_HOUR_RENT, minute=SCAN_MINUTE_RENT), id="rent")
-        scheduler.add_job(_watchdog, "interval", minutes=10, id="watchdog")
         scheduler.add_job(lambda: _bg(_translate_bg, None), "interval", hours=1, id="translate")
         scheduler.start()
         log.info("внутренний планировщик включён: %d заданий", len(scheduler.get_jobs()))

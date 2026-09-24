@@ -169,3 +169,36 @@ def test_pause_and_watchdog(clean_db):
     db.commit()
     assert scraper.close_stale_runs(db) == 1
     assert db.get(ScrapeRun, run.id).status == "failed"
+
+
+def test_osiedle_by_coordinates(clean_db, monkeypatch):
+    """OLX даёт координаты и не даёт осиедле, Otodom даёт оба. Размеченные точки
+    Otodom работают картой: сосед по дому получает его осиедле, а на отшибе
+    система молчит, а не угадывает."""
+    from app import geo_knn
+
+    db = clean_db
+    monkeypatch.setattr(geo_knn, "MIN_MAP_POINTS", 10)   # в бою порог 500 точек
+    # 12 объявлений Otodom в одном месте (Gaj) и 12 в другом (Jagodno)
+    pts = [(51.0800 + i * 0.0002, 17.0300 + i * 0.0002, u"Gaj") for i in range(12)]
+    pts += [(51.0500 + i * 0.0002, 17.0600 + i * 0.0002, u"Jagodno") for i in range(12)]
+    for i, (la, lo, name) in enumerate(pts):
+        db.add(Listing(source="otodom", source_id="o%d" % i, offer_type="sale", is_active=True,
+                       lat=la, lon=lo, osiedle=name))
+    near = Listing(source="olx", source_id="n1", offer_type="rent", is_active=True,
+                   lat=51.0802, lon=17.0302)                      # во дворе у Gaj
+    far = Listing(source="olx", source_id="n2", offer_type="rent", is_active=True,
+                  lat=51.2000, lon=17.3000)                       # за городом, соседей нет
+    no_geo = Listing(source="olx", source_id="n3", offer_type="rent", is_active=True)
+    db.add_all([near, far, no_geo])
+    db.commit()
+
+    res = geo_knn.fill_missing(db)
+    db.refresh(near); db.refresh(far); db.refresh(no_geo)
+    assert res["filled"] == 1 and res["unsure"] == 1
+    assert near.osiedle == u"Gaj" and near.osiedle_src == "geo"
+    assert far.osiedle is None                                    # далеко — молчим
+    assert no_geo.osiedle is None                                 # без координат нечего решать
+    # свои же догадки в карту не попадают, иначе ошибка расползётся
+    assert all(p[2] != "geo" for p in [(0, 0, x[2]) for x in pts])
+    assert geo_knn.build_map(db).size == 24

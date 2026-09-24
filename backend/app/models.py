@@ -70,6 +70,9 @@ class Listing(Base):
     district = Column(String, index=True)    # 5 дзельниц
     osiedle = Column(String, index=True)     # 48 осиедле
     osiedle_override = Column(String)
+    # 'geo' — осиедле не от площадки, а по координатам (geo_knn): OLX его не
+    # даёт, а без осиедле объявление сравнивается с чужими квартирами
+    osiedle_src = Column(String)
     street = Column(String)
     lat = Column(Float)
     lon = Column(Float)

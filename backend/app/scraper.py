@@ -109,15 +109,24 @@ def beat_apart(run_id: int, phase: Optional[str] = None, **counters):
         db.close()
 
 
-def close_stale_runs(db: Session) -> int:
+def close_stale_runs(db: Session, orphans: bool = False) -> int:
     """Сторож: прогон без отметки жизни дольше WATCHDOG_MINUTES — failed."""
-    limit = datetime.utcnow() - timedelta(minutes=WATCHDOG_MINUTES)
-    stale = db.query(ScrapeRun).filter(ScrapeRun.status == "running",
-                                       ScrapeRun.last_beat < limit).all()
+    # orphans=True (старт сервера): закрываем ЛЮБОЙ «running» независимо от
+    # отметки. Живой прогон существует только внутри процесса (_state), и раз
+    # процесс только что поднялся — его прогонов нет. 20.09.2026 сервер
+    # перезапустили через 2 минуты после отметки, и строка висела «running»
+    # трое суток: сторож ждал 180 минут, а сам он при DISABLE_SCHEDULER не работал.
+    q = db.query(ScrapeRun).filter(ScrapeRun.status == "running")
+    if not orphans:
+        q = q.filter(ScrapeRun.last_beat < datetime.utcnow() - timedelta(minutes=WATCHDOG_MINUTES))
+    stale = q.all()
     for r in stale:
         r.status = "failed"
         r.finished_at = datetime.utcnow()
-        r.message = (r.message or "") + u"\nзакрыт сторожем: нет отметки жизни %d мин" % WATCHDOG_MINUTES
+        r.message = (r.message or "") + (
+            u"\nзакрыт при старте сервера: процесс, который его вёл, уже не работает"
+            if orphans else
+            u"\nзакрыт сторожем: нет отметки жизни %d мин" % WATCHDOG_MINUTES)
     if stale:
         db.commit()
     if not is_running():
@@ -313,8 +322,10 @@ def post_process(db: Session, run: Optional[ScrapeRun] = None, kind: str = "sale
     """Пересчёты после прогона. Каждый шаг ловит своё исключение: сломанная
     доходность не должна отменять склейку дублей. Прогон зовёт без перевода —
     см. translate_after_run."""
-    from . import analytics, dedup, fx, rent_analytics, translate
+    from . import analytics, dedup, fx, geo_knn, rent_analytics, translate
     steps = [
+        # первым: и склейка «по числам», и пулы выгодности опираются на место
+        ("осиедле по координатам", lambda: geo_knn.fill_missing(db)),
         ("дубли", lambda: dedup.rebuild_groups(db)),
         ("курсы", lambda: (fx.refresh(db), fx.apply_to_listings(db))),
         ("выгодность", lambda: analytics.recompute_deal_scores(db)),
