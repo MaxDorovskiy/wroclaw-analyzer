@@ -40,7 +40,14 @@ PROTECTED = {"condition_override", "osiedle_override", "note", "is_favorite",
              "dedup_detached", "title_uk", "description_uk", "translated_at",
              "translate_provider", "translate_version"}
 # что даёт только карточка — списком выдачи не затирать
-DETAILS_ONLY = {"description_pl", "characteristics_json", "raw_json"}
+# Поля, которые знает только КАРТОЧКА: проход по выдаче их не трогает.
+# `condition` здесь потому, что он выводится из описания: в выдаче описания
+# нет, classify_condition возвращает "unknown" — и каждый следующий прогон
+# затирал состояние, честно вычисленное по карточке. На 24.09.2026 из-за этого
+# 81% объявлений продажи числились "невідомо", и пулы выгодности сравнивали
+# ремонт с бетоном в одной корзине (стало 33%).
+DETAILS_ONLY = {"description_pl", "characteristics_json", "raw_json",
+                "condition", "condition_src"}
 # причины Source.skipped — для сообщения прогона
 SKIP_LABELS = {"investment": u"инвестиций целиком", "outside": u"вне Вроцлава"}
 

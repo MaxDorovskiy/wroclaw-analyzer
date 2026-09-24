@@ -371,8 +371,18 @@ class Otodom(Source):
             raw.seller_id = "agency:%s" % agency["id"]
         elif owner.get("id"):
             raw.seller_id = "user:%s" % owner["id"]
-        phones = owner.get("phones") or agency.get("phones") or []
-        if isinstance(phones, list) and phones:
+        # У частника `owner.phones` ВСЕГДА пустой, а номер лежит в
+        # `contactDetails.phones` и `owner.contacts[].phone` — из-за этого у 1670
+        # собственников с уже скачанной карточкой телефона не было (24.09.2026).
+        # Именно частники и нужны: агентство перезвонит само.
+        contact = ad.get("contactDetails") or {}
+        phones = (owner.get("phones") or agency.get("phones")
+                  or contact.get("phones") or [])
+        if not phones:
+            phones = [c.get("phone") for c in (owner.get("contacts") or [])
+                      if isinstance(c, dict) and c.get("phone")]
+        phones = [p for p in phones if p]
+        if phones:
             raw.seller_phone = phones[0] if isinstance(phones[0], str) else str(phones[0])
 
         imgs = []

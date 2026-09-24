@@ -16,7 +16,7 @@
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m pytest tests -q                       # 6 тестов на фикстурах
+.venv/bin/python -m pytest tests -q                       # 33 теста на фикстурах
 .venv/bin/python scripts/demo_seed.py --db data/demo.db   # синтетика для интерфейса
 cd frontend && npm install && npm run build && cd ..
 WRO_DB=data/demo.db DISABLE_SCHEDULER=1 .venv/bin/uvicorn app.main:app --app-dir backend --port 8020

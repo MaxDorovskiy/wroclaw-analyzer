@@ -202,3 +202,48 @@ def test_osiedle_by_coordinates(clean_db, monkeypatch):
     # свои же догадки в карту не попадают, иначе ошибка расползётся
     assert all(p[2] != "geo" for p in [(0, 0, x[2]) for x in pts])
     assert geo_knn.build_map(db).size == 24
+
+
+def test_list_run_does_not_erase_condition_from_card(clean_db):
+    """Класс состояния выводится из описания, а описание есть только в карточке.
+
+    Проход по выдаче пересчитывал его на пустом тексте и записывал "unknown"
+    поверх честного значения: на боевой базе 24.09.2026 так «невідомо» стало
+    у 81% объявлений продажи, и пулы выгодности сравнивали ремонт с бетоном
+    в одной корзине. После правки список состояние не трогает, карточка —
+    трогает."""
+    from app.sources.base import RawListing
+
+    db = clean_db
+    run = ScrapeRun(kind="sale", status="running")
+    db.add(run)
+    db.commit()
+    now = datetime.utcnow()
+
+    card = RawListing(source="otodom", source_id="77", url="https://x/77", offer_type="sale",
+                      title="Mieszkanie", description="Mieszkanie po generalnym remoncie, gotowe do zamieszkania",
+                      area=50.0, rooms_raw="2", price=600000)
+    card.needs_details = False
+    row = scraper.upsert(db, card, run, now, {})
+    db.commit()
+    assert row.condition == "renovated"
+
+    # тот же объект, но из ВЫДАЧИ: описания нет
+    lst = RawListing(source="otodom", source_id="77", url="https://x/77", offer_type="sale",
+                     title="Mieszkanie", area=50.0, rooms_raw="2", price=610000)
+    lst.needs_details = True
+    scraper.upsert(db, lst, run, now, {})
+    db.commit()
+    db.refresh(row)
+    assert row.condition == "renovated"        # не затёрли
+    assert row.price_pln == 610000             # а цену из выдачи взяли
+
+    # карточка сказала иначе — верим карточке
+    card2 = RawListing(source="otodom", source_id="77", url="https://x/77", offer_type="sale",
+                       title="Mieszkanie", description="Mieszkanie do generalnego remontu",
+                       area=50.0, rooms_raw="2", price=610000)
+    card2.needs_details = False
+    scraper.upsert(db, card2, run, now, {})
+    db.commit()
+    db.refresh(row)
+    assert row.condition == "to_renovate"

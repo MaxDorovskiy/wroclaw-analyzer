@@ -74,6 +74,12 @@
 | `POST /api/settings` **[admin]** | `{key: value, ...}` — только ключи из `SAFE_KEYS` | `{saved: [keys]}` |
 | `GET /api/jobs` | — | `{scheduler_running, disabled_by_env, jobs: [{id, next_run}]}` |
 | `GET /api/export` | те же фильтры, что у `/api/listings`, + `format` (csv\|xlsx) | файл |
+| `GET /api/contacts` | `offer_type`, `seller_type`, `q` (имя или телефон), `sort` (active_total\|last_seen\|listings_sale\|listings_rent\|first_seen), `order`, `page`, `per_page` (50, макс. 500) | `{total, page, per_page, items: [{seller_key, seller_name, seller_type, seller_type_uk, seller_phone, source, listings_sale, listings_rent, active_total, first_seen, last_seen, osiedla: [до 6], sample_ids: [до 5]}]}` — продавцы, склеенные по телефону/имени |
+| `GET /api/contacts/export` | те же фильтры + `format` (csv\|xlsx) | файл |
+| `GET /api/favorites/users` | — | `{me, users: [{user, count}]}`; владельцу — все логины (он выбирает, чей список смотреть), остальным — только свой |
+| `GET /api/profile` | — | `{user, display_name, phone, email, agency, about, pres_lang}` — своя визитка. Чужую не отдаём никому, включая владельца: это личные контакты |
+| `POST /api/profile` | любые из `display_name, phone, email, agency, about, pres_lang` | то же, что GET |
+| `POST /api/presentation` | `{ids: [до 30], lang` (uk\|pl, по умолчанию из визитки)`, title?, comment?}` | PDF-файл. Синхронно (Chromium вёрстает за секунды); при `lang=uk` непереведённое переводится на месте. Контакты в файле — ТОГО, КТО ОТПРАВЛЯЕТ, а не продавца |
 
 Ошибки — `{detail: "текст"}` с кодом 4xx/5xx; фронтенд показывает `detail`,
 а при 404 на ручке — подсказку «сервер ещё не перезапущен после выкатки».

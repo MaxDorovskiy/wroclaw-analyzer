@@ -62,3 +62,21 @@ def test_olx_items(fixtures):
     b = normalize(raws[1])
     assert b["external_url"].endswith("ID4v4VB") and b["seller_type"] == "agency"
     assert b["condition"] == "renovated"
+
+
+def test_otodom_private_seller_phone(fixtures):
+    """У частника `owner.phones` ВСЕГДА пустой, номер лежит в
+    `contactDetails.phones` и `owner.contacts[].phone`. Адаптер читал только
+    первое: 1670 телефонов собственников лежали в базе и не были видны
+    (боевая база 24.09.2026). Именно частники и нужны — агентство перезвонит
+    само."""
+    data = extract_next_data(_html(fixtures, "otodom_search.json"))
+    items, _ = find_search_block(data)
+    ad = json.loads((fixtures / "otodom_ad.json").read_text(encoding="utf-8"))["props"]["pageProps"]["ad"]
+    ad = dict(ad)
+    ad.pop("agency", None)
+    ad["owner"] = {"id": 5, "name": "Maciej", "type": "PRIVATE", "phones": [],
+                   "contacts": [{"name": "Maciej", "phone": "+48889890447", "hasPhoneNumber": True}]}
+    ad["contactDetails"] = {"name": "Maciej", "type": "private", "phones": ["+48889890447"]}
+    d = normalize(Otodom().apply_ad(Otodom().parse_item(items[0], "sale"), ad))
+    assert d["seller_type"] == "private" and d["seller_phone"] == "+48889890447"
