@@ -29,6 +29,10 @@ export default function Runs({ summary, me }) {
   // а потом оказывается, что он давно упал.
   useEffect(() => { load(); const t = setInterval(load, 20000); return () => clearInterval(t) }, [])
 
+  // Остановка и пауза сворачивают часовой прогон: на полпути его не
+  // возобновить, следующее окно — через 6 часов. Спрашиваем.
+  const ask = (q, name, fn, okMsg) => { if (window.confirm(q)) run(name, fn, okMsg) }
+
   const run = async (name, fn, okMsg) => {
     setBusy(name)
     try { const r = await fn(); flash(typeof okMsg === 'function' ? okMsg(r) : okMsg); load() }
@@ -49,7 +53,8 @@ export default function Runs({ summary, me }) {
           <button className="btn" disabled={!!busy || running} title="Otodom + OLX, оренда; ~30 хвилин"
             onClick={() => run('rent', () => api.scrape('rent', 'all'), r => `Запущено прогін оренди #${r.run_id ?? ''}`)}>▶ Запустити оренду</button>
           <button className="btn danger" disabled={!!busy || !running}
-            onClick={() => run('stop', api.scrapeStop, 'Зупиняємо — прогін згорнеться за півхвилини')}>■ Зупинити</button>
+            onClick={() => ask('Зупинити поточний прогін? Зібране збережеться, але решта оголошень чекатиме наступного вікна.',
+              'stop', api.scrapeStop, 'Зупиняємо — прогін згорнеться за півхвилини')}>■ Зупинити</button>
           <span style={{ width: 16 }} />
           <label className="chk">пауза на
             <input type="number" min={0} style={{ width: 64 }} value={hours} onChange={e => setHours(+e.target.value)} />
@@ -57,7 +62,10 @@ export default function Runs({ summary, me }) {
           </label>
           <button className="btn ghost" disabled={!!busy}
             title="Згортає поточний прогін і не дає стартувати плановим. Не забудьте зняти — у шапці для цього червона плашка"
-            onClick={() => run('pause', () => api.scrapePause(hours), 'Пауза поставлена')}>⏸ Пауза</button>
+            onClick={() => ask(hours > 0
+              ? `Поставити паузу на ${hours} год? Планові прогони в цей час не стартують.`
+              : 'Поставити паузу ДО СКАСУВАННЯ? Збір зупиниться, поки ви не знімете її вручну.',
+              'pause', () => api.scrapePause(hours), 'Пауза поставлена')}>⏸ Пауза</button>
           {paused && <button className="btn" disabled={!!busy}
             onClick={() => run('resume', api.scrapeResume, 'Паузу знято')}>▶ Зняти паузу</button>}
           <span style={{ width: 16 }} />

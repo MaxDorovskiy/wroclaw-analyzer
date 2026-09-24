@@ -59,6 +59,10 @@ export default function Settings() {
       const body = {}
       for (const [k, v] of Object.entries(s)) {
         if (v === SECRET_MASK) continue
+        // Пустая строка в поле, где сервер прислал маску, — это не «стереть
+        // ключ», а «кликнул в поле и ушёл»: onFocus снимает маску, чтобы
+        // можно было печатать. Стирать ключ так молча нельзя.
+        if (v === '' && orig && orig[k] === SECRET_MASK) continue
         if (orig && orig[k] === v) continue
         body[k] = v
       }
@@ -90,6 +94,9 @@ export default function Settings() {
       <input type={secret ? 'password' : (f.type || 'text')} value={v}
         placeholder={v === SECRET_MASK ? 'не змінювати' : (secret ? 'не задано' : '')}
         onFocus={secret && v === SECRET_MASK ? () => set(f.key, '') : undefined}
+        // ушёл из поля, ничего не введя — вернуть маску, иначе поле выглядит
+        // так, будто ключ уже стёрт
+        onBlur={secret && v === '' && orig && orig[f.key] === SECRET_MASK ? () => set(f.key, SECRET_MASK) : undefined}
         onChange={e => set(f.key, f.type === 'number' && e.target.value !== '' ? Number(e.target.value) : e.target.value)} />
     )
   }

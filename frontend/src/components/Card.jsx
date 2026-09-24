@@ -6,6 +6,7 @@ import Gallery from './Gallery.jsx'
 import Phone from './Phone.jsx'
 import ApiError from './ApiError.jsx'
 import { useFlash } from './Toast.jsx'
+import { useModal } from './modal.js'
 
 const val = (v) => v == null || v === '' ? '—' : typeof v === 'boolean' ? (v ? 'так' : 'ні') : String(v)
 
@@ -156,12 +157,6 @@ export default function Card({ id, onClose, onOpen, geo, goTo }) {
   }
   useEffect(() => { setL(null); load() }, [id])
 
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
   const run = async (name, fn, okMsg) => {
     setBusy(name)
     try { await fn(); if (okMsg) flash(okMsg) }
@@ -183,10 +178,14 @@ export default function Card({ id, onClose, onOpen, geo, goTo }) {
   // «інша квартира»: размещение уходит из группы дублей. Барьера, который
   // не ошибается, не существует (docs/ARCHITECTURE.md §4) — кнопка есть с
   // первого дня.
-  const detach = (dupId) => run('detach', async () => {
-    await api.detach(dupId)
-    load()
-  }, 'Розміщення від\'єднано від групи')
+  const detach = (dupId) => {
+    // отменить можно только новым прогоном склейки — спрашиваем до вызова
+    if (!window.confirm('Відокремити це розміщення від групи? Воно стане самостійним оголошенням.')) return
+    run('detach', async () => {
+      await api.detach(dupId)
+      load()
+    }, 'Розміщення від’єднано від групи')
+  }
 
   // Ручные правки шлём только те, что изменились: правка, равная авто-значению,
   // всё равно легла бы в user_actions и перекрыла бы автомат навсегда.
@@ -204,6 +203,8 @@ export default function Card({ id, onClose, onOpen, geo, goTo }) {
     setForm({ osiedle: d.osiedle || '', condition: d.condition || '', note: d.note || '' })
   }, 'Збережено')
 
+  const modal = useModal(onClose, () => !!dirty)
+
   const osiedla = (geo?.districts || []).flatMap(d => (d.osiedla || []).map(o => ({
     name: o.name, label: biText(lang, o.name, o.name_uk) + ` — ${biText(lang, d.name, d.name_uk)}`,
   })))
@@ -211,9 +212,10 @@ export default function Card({ id, onClose, onOpen, geo, goTo }) {
   const sellerTab = isRent ? 'rent' : 'catalog'
 
   return (
-    <div className="overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="modal">
-        <button className="close" onClick={onClose} title="Закрити (Esc)">×</button>
+    <div className="overlay" {...modal.overlay}>
+      <div className="modal" ref={modal.ref} role="dialog" aria-modal="true" tabIndex={-1}
+        aria-label={l ? (l.title_uk || l.title_pl || 'Оголошення') : 'Оголошення'}>
+        <button className="close" onClick={modal.close} title="Закрити (Esc)" aria-label="Закрити">×</button>
         {err && <ApiError err={err} prefix="Картку не завантажено" />}
         {!l && !err && <p className="muted"><span className="spin" />Завантаження…</p>}
         {l && (

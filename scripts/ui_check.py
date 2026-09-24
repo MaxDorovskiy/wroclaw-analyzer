@@ -21,6 +21,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -30,8 +31,10 @@ ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / 'frontend' / 'dist' / 'index.html'
 FIXTURES = ROOT / 'tests' / 'fixtures' / 'ui'
 API_BASE = 'http://ui-check.invalid'
-DEFAULT_OUT = ('/tmp/claude-0/-home-user-flatfy-analyzer/'
-               'bbbe8109-39f2-5b78-992c-9ed3be3d192d/scratchpad/ui/')
+# куда класть скриншоты, если путь не передан аргументом. Раньше здесь
+# стоял путь чужой машины (переехал из киевского репозитория) — на Windows
+# он создавал папку tmp в корне диска C, и найти картинки было негде.
+DEFAULT_OUT = str(Path(tempfile.gettempdir()) / 'wro-ui')
 VIEWPORT = {'width': 1440, 'height': 900}
 
 # Картинки объявлений в фикстурах — настоящие CDN-адреса; сети здесь нет, и
@@ -251,6 +254,12 @@ def run_scenario(errors, missing, served, out_dir):
         page.wait_for_timeout(200)
         shot('catalog_dark')
         page.emulate_media(color_scheme='light')
+
+        # Огляд — домашний экран, на нём открывается система
+        go('#/home', '.cards .card')
+        if 'Стан системи' not in page.inner_text('body'):
+            errors.append('огляд: немає панелі стану системи')
+        shot('home')
 
         go('#/deals?preset=d15', 'table.grid tbody tr.clickable')
         shot('deals')

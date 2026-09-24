@@ -131,9 +131,13 @@ export default function Stats({ summary, goTo }) {
     const x = a[k] ?? -Infinity, y = b[k] ?? -Infinity
     return (x < y ? -1 : x > y ? 1 : 0) * (o === 'asc' ? 1 : -1)
   })
+  const flip = (k) => setSort([k, sort[0] === k && sort[1] === 'desc' ? 'asc' : 'desc'])
   const Th = ({ k, children, title }) => (
     <th className={'num sortable'} title={title || 'Сортувати'}
-      onClick={() => setSort([k, sort[0] === k && sort[1] === 'desc' ? 'asc' : 'desc'])}>
+      tabIndex={0} role="button"
+      aria-sort={sort[0] === k ? (sort[1] === 'asc' ? 'ascending' : 'descending') : undefined}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(k) } }}
+      onClick={() => flip(k)}>
       {children}{sort[0] === k ? (sort[1] === 'asc' ? ' ▲' : ' ▼') : ''}
     </th>
   )

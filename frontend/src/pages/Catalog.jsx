@@ -120,7 +120,7 @@ export default function Catalog({ onOpen, preset, urlParams, onParams, geo, rent
             СТАРЫЙ порядок под новой стрелкой (киевские грабли 06.09.2026) */}
         <div className="wrap" style={{ opacity: loading ? 0.45 : 1, transition: 'opacity .15s' }}>
           <ListingsTable items={data.items} onOpen={onOpen} rent={rent} mixed={mixed}
-            sel={sel} onSel={onSel} sort={f.sort} order={f.order}
+            sel={sel} onSel={onSel} sort={f.sort} order={f.order} loading={loading}
             onSort={(s, o) => setF({ ...f, sort: s, order: o, page: 1 })} />
         </div>
         {pager(false)}

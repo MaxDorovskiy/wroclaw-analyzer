@@ -10,6 +10,6 @@ export function useFlash(ms = 3500) {
     return () => clearTimeout(t)
   }, [msg, ms])
   const flash = useCallback((text) => setMsg({ text, at: Date.now() }), [])
-  const toast = msg ? <div className="toast">{msg.text}</div> : null
+  const toast = msg ? <div className="toast" role="status" aria-live="polite">{msg.text}</div> : null
   return [flash, toast]
 }

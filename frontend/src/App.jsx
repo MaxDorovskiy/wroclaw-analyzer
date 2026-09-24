@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import Catalog from './pages/Catalog.jsx'
+import Dashboard from './pages/Dashboard.jsx'
 import Deals from './pages/Deals.jsx'
 import Rent from './pages/Rent.jsx'
 import Contacts from './pages/Contacts.jsx'
@@ -17,6 +18,7 @@ import { api, fmtNum, fmtDateTime } from './api.js'
 import { LangContext, readLang, writeLang } from './i18n.js'
 
 const TABS = [
+  ['home', 'Огляд'],
   ['catalog', 'Каталог'],
   ['deals', 'Вигідні'],
   ['rent', 'Оренда'],
@@ -49,7 +51,7 @@ function parseHash() {
   const params = Object.fromEntries(new URLSearchParams(qi < 0 ? '' : raw.slice(qi + 1)))
   const seg = path.split('/').filter(Boolean)
   if (seg[0] === 'listing' && seg[1]) return { tab: 'catalog', params: { id: seg[1] } }
-  return { tab: TAB_IDS.includes(seg[0]) ? seg[0] : 'catalog', params }
+  return { tab: TAB_IDS.includes(seg[0]) ? seg[0] : 'home', params }
 }
 
 function buildHash(tab, params) {
@@ -156,12 +158,18 @@ export default function App() {
   // от владельца «Налаштування» из-за 404 после выкатки — та самая ловушка.
   // Ограничение здесь только косметическое, настоящее — 403 на сервере.
   useEffect(() => { api.me().then(setMe).catch(() => setMe(null)) }, [])
+  // Заголовок вкладки браузера называет раздел: с десятком открытых вкладок
+  // одинаковые «Wrocław Analyzer» неразличимы
+  useEffect(() => {
+    const name = (TABS.find(([id]) => id === tab) || [])[1]
+    document.title = name ? name + ' · Wrocław Analyzer' : 'Wrocław Analyzer'
+  }, [tab])
   // Візитка для PDF-підбірки. Старий сервер ручки не має — тоді просто немає
   // контактів у файлі, а не біла сторінка.
   useEffect(() => { api.profile().then(setProfile).catch(() => setProfile(null)) }, [])
 
   const Page = {
-    catalog: Catalog, deals: Deals, rent: Rent, favorites: Favorites, contacts: Contacts,
+    home: Dashboard, catalog: Catalog, deals: Deals, rent: Rent, favorites: Favorites, contacts: Contacts,
     stats: Stats, runs: Runs, journal: Journal, settings: Settings,
   }[tab]
   const isViewer = me?.role === 'viewer'
@@ -172,7 +180,17 @@ export default function App() {
   return (
     <LangContext.Provider value={{ lang, setLang }}>
       <div className="topbar">
-        <h1>🏙️ Wrocław Analyzer</h1>
+        <h1>
+          {/* знак встроен в разметку, а не подгружается: шапка не мигает
+              пустотой и работает при любом корне раздачи */}
+          <svg className="logo" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+            <rect width="64" height="64" rx="14" fill="#c8102e" />
+            <path d="M12 17 L21 47 L32 27 L43 47 L52 17" fill="none" stroke="#fff"
+              strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="52" cy="17" r="4.5" fill="#fff" />
+          </svg>
+          Wrocław Analyzer
+        </h1>
         <div className="tabs">
           {tabs.map(([id, name]) => (
             <button key={id} className={'tab' + (tab === id ? ' active' : '')}

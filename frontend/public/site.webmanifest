@@ -1,0 +1,15 @@
+{
+  "name": "Wrocław Analyzer",
+  "short_name": "Wrocław",
+  "description": "Аналіз оголошень про квартири у Вроцлаві",
+  "lang": "uk",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f9f9f7",
+  "theme_color": "#c8102e",
+  "icons": [
+    { "src": "/favicon.svg", "type": "image/svg+xml", "sizes": "any" },
+    { "src": "/icon-192.png", "type": "image/png", "sizes": "192x192" },
+    { "src": "/apple-touch-icon.png", "type": "image/png", "sizes": "180x180" }
+  ]
+}

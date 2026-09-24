@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { api, errorText } from '../api.js'
 import { useFlash } from './Toast.jsx'
+import { useModal } from './modal.js'
 
 // Візитка ріелтора: ім'я, телефон, пошта, агентство. Підставляється в
 // PDF-підбірку, яку надсилають клієнту. У кожного логіна своя — у підбірці
@@ -17,6 +18,9 @@ export default function Profile({ profile, onSaved, onClose }) {
   const [busy, setBusy] = useState(false)
   const [flash, toast] = useFlash()
   const set = (k, v) => setF({ ...f, [k]: v })
+  // правки визитки терять обидно: спрашиваем перед закрытием по Esc и клику мимо
+  const modal = useModal(() => onClose && onClose(), () => ['display_name', 'phone', 'email', 'agency', 'about', 'pres_lang']
+    .some(k => (f[k] || '') !== ((profile && profile[k]) || (k === 'pres_lang' ? 'uk' : ''))))
 
   const save = async () => {
     setBusy(true)
@@ -30,10 +34,10 @@ export default function Profile({ profile, onSaved, onClose }) {
   }
 
   return (
-    <div className="overlay" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="modal narrow">
-        <button className="close" onClick={onClose} title="Закрити">×</button>
-        <h2>Моя візитка</h2>
+    <div className="overlay" {...modal.overlay}>
+      <div className="modal narrow" ref={modal.ref} role="dialog" aria-modal="true" aria-labelledby="prof-h" tabIndex={-1}>
+        <button className="close" onClick={modal.close} title="Закрити" aria-label="Закрити">×</button>
+        <h2 id="prof-h">Моя візитка</h2>
         <p className="muted">
           Ці контакти підставляються в PDF-підбірку для клієнта. Логін: <b>{profile?.user}</b>.
         </p>

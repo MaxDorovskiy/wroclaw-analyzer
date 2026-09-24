@@ -141,8 +141,11 @@ export default function Contacts({ onOpen, urlParams, onParams, geo, goTo }) {
                   </td>
                 </tr>
               ))}
-              {!(data.items || []).length && (
-                <tr><td colSpan={9} className="muted" style={{ textAlign: 'center', padding: 24 }}>Нічого не знайдено</td></tr>
+              {!(data.items || []).length && loading && [0, 1, 2].map(i => (
+                <tr key={'sk' + i}><td colSpan={9}><div className="skeleton sk-row" /></td></tr>
+              ))}
+              {!(data.items || []).length && !loading && (
+                <tr><td colSpan={9}><div className="empty"><div className="big">Нічого не знайдено</div>Спробуйте послабити фільтри.</div></td></tr>
               )}
             </tbody>
           </table>
