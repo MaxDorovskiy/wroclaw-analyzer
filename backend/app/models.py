@@ -101,6 +101,9 @@ class Listing(Base):
     # --- дубли ---
     dedup_group = Column(String, index=True)
     group_size = Column(Integer, default=1)
+    # 'investment' — группа не дубли, а РАЗНЫЕ квартиры одной инвестиции
+    # застройщика: по числам они неразличимы, но подпись должна быть честной
+    group_kind = Column(String)
     is_representative = Column(Boolean, default=True, index=True)
     dedup_detached = Column(Boolean, default=False)   # «інша квартира» — из группы вынесено вручную
 

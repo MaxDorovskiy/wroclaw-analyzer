@@ -208,6 +208,8 @@ export default function Card({ id, onClose, onOpen, geo, goTo }) {
   const osiedla = (geo?.districts || []).flatMap(d => (d.osiedla || []).map(o => ({
     name: o.name, label: biText(lang, o.name, o.name_uk) + ` — ${biText(lang, d.name, d.name_uk)}`,
   })))
+  // группа — ценник застройщика, а не одно и то же объявление дважды
+  const inv = l?.group_kind === 'investment' && (l.group_size || 1) > 1
   const isRent = l?.offer_type === 'rent'
   const sellerTab = isRent ? 'rent' : 'catalog'
 
@@ -261,7 +263,7 @@ export default function Card({ id, onClose, onOpen, geo, goTo }) {
               <div><span className="k">Подано: </span>{fmtDate(l.posted_at)}</div>
               <div><span className="k">У базі з: </span>{fmtDate(l.first_seen)} <span className="muted">({l.days_on_market ?? '—'} дн)</span></div>
               <div><span className="k">Останній перегляд: </span>{fmtDateTime(l.last_seen)}</div>
-              <div><span className="k">Розміщень: </span>{l.group_size || 1}{l.dedup_group ? <span className="muted"> · {l.dedup_group}</span> : null}</div>
+              <div><span className="k">{inv ? 'Квартир у будинку: ' : 'Розміщень: '}</span>{l.group_size || 1}{l.dedup_group ? <span className="muted"> · {l.dedup_group}</span> : null}</div>
               {l.lat != null && l.lon != null && (
                 <div><span className="k">Мапа: </span>
                   <a href={`https://www.google.com/maps?q=${l.lat},${l.lon}`} target="_blank" rel="noreferrer">{Number(l.lat).toFixed(4)}, {Number(l.lon).toFixed(4)} ↗</a></div>
@@ -314,12 +316,19 @@ export default function Card({ id, onClose, onOpen, geo, goTo }) {
                   : <p className="muted">Ціна не змінювалась</p>}
               </div>
               <div>
-                <h3>Розміщення (дублі)</h3>
+                <h3>{inv ? 'Квартири в цій інвестиції' : 'Розміщення (дублі)'}</h3>
+                {inv && (
+                  <p className="hint" style={{ marginTop: 0 }}>
+                    Забудовник продає {l.group_size} різних квартир у цьому будинку: за параметрами
+                    вони нерозрізненні, тому в каталозі показана найдешевша. Це НЕ дублі.
+                  </p>
+                )}
                 {(l.dupes || []).length
                   ? <table className="dupes"><tbody>
                       {l.dupes.map(d => (
                         <tr key={d.id} className={d.id === l.id ? 'self' : ''}>
                           <td>{tr('source', d.source)}</td>
+                          {inv && <td className="num">{d.area ? fmtNum(d.area, 1) + ' м²' : '—'}</td>}
                           <td className="num"><b>{fmtPln(d.price_pln)}</b></td>
                           <td className="muted">{tr('seller', d.seller_type)}</td>
                           <td className="muted">{fmtDate(d.first_seen)}</td>
@@ -330,8 +339,10 @@ export default function Card({ id, onClose, onOpen, geo, goTo }) {
                           </td>
                           <td>
                             <button className="btn ghost small" disabled={busy === 'detach'}
-                              title="Це інша квартира, а не дубль — вивести з групи"
-                              onClick={() => detach(d.id)}>інша квартира</button>
+                              title={inv
+                                ? 'Вивести цю квартиру з групи і показувати в каталозі окремо'
+                                : 'Це інша квартира, а не дубль — вивести з групи'}
+                              onClick={() => detach(d.id)}>{inv ? 'показати окремо' : 'інша квартира'}</button>
                           </td>
                         </tr>
                       ))}

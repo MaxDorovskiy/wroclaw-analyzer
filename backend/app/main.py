@@ -230,6 +230,8 @@ def row_dict(l: Listing, ph: Optional[dict] = None, is_fav: bool = False) -> Dic
         "is_active": l.is_active, "removed_at": l.removed_at,
         "days_on_market": (datetime.utcnow() - start).days if start else None,
         "dedup_group": l.dedup_group, "group_size": l.group_size, "is_representative": l.is_representative,
+        # 'investment' — в группе РАЗНЫЕ квартиры одной инвестиции, а не одна и та же
+        "group_kind": l.group_kind,
         "discount_pct": l.discount_pct, "baseline_sqm": l.baseline_sqm,
         "baseline_level": l.baseline_level, "baseline_level_uk": i18n.LEVELS.get(l.baseline_level or "", ("", ""))[1],
         "baseline_count": l.baseline_count, "deal_thin_base": l.deal_thin_base,

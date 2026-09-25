@@ -147,10 +147,17 @@ export default function ListingsTable({ items, onOpen, rent = false, mixed = fal
               <div className="badges">
                 {mixed && <span className={'badge ' + (rowRent ? 'owner' : 'gray')}>{rowRent ? 'оренда' : 'продаж'}</span>}
                 <span className="badge gray">{tr('source', l.source)}</span>
+                {/* Застройщик выставляет десятки ПОХОЖИХ, но РАЗНЫХ квартир одной
+                    инвестиции; по числам они неразличимы и попадают в одну группу.
+                    Подпись «ещё 31 размещение» для них — неправда. */}
                 {l.group_size > 1 && (
-                  <span className="badge gray" title="Та сама квартира розміщена кілька разів — усі розміщення видно в картці">
-                    ще {l.group_size - 1} розміщ.
-                  </span>
+                  l.group_kind === 'investment'
+                    ? <span className="badge warn" title="Це різні квартири однієї інвестиції забудовника, а не одна й та сама. У картці — усі з площами та цінами; показана найдешевша">
+                        {l.group_size} квартир у цьому будинку
+                      </span>
+                    : <span className="badge gray" title="Та сама квартира розміщена кілька разів — усі розміщення видно в картці">
+                        ще {l.group_size - 1} розміщ.
+                      </span>
                 )}
                 {l.no_commission && <span className="badge deal">без комісії</span>}
                 {l.condition && l.condition !== 'unknown' && (

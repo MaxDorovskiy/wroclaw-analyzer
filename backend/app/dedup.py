@@ -57,12 +57,43 @@ class _UF:
             self.p[max(ra, rb)] = min(ra, rb)
 
 
+MIN_INVEST_AREAS = 4
+
+
+def is_investment(members: List) -> bool:
+    """Группа — не дубли, а ценник застройщика?
+
+    Квартиры одной инвестиции по числам неразличимы: те же комнаты,
+    тот же этаж, площадь и цена в пределах погрешности ключа — и склейка
+    собирает их в одну карточку. Разобрать их обратно — засорить каталог
+    тридцатью почти одинаковыми строками; оставить как есть — соврать
+    подписью «ещё 31 размещение». Поэтому группу помечаем, а подпись
+    меняется на «N квартир в этом доме».
+
+    Признак — ЧИСЛО РАЗНЫХ ТОЧНЫХ ПЛОЩАДЕЙ, а не «один продавец»:
+    самая большая группа на боевой базе 24.09.2026 (30 квартир, 20 площадей)
+    стояла у ДВУХ агентств сразу. Четыре разные площади (40,52 / 40,60 /
+    40,68 / 40,76) не объяснить опиской в одном объявлении; три — ещё можно
+    (34,56 / 34,57 / 35,0 при одной цене — это одна квартира, поданная трижды).
+    Второе условие — первичка или застройщик в группе: на вторичке столько
+    одинаковых квартир в одном доме разом не продают.
+
+    На 24.09.2026: 100 групп, 817 объявлений.
+    """
+    if len(members) < MIN_INVEST_AREAS:
+        return False
+    if not any((x.market == "primary" or x.seller_type == "developer") for x in members):
+        return False
+    areas = {round(x.area, 2) for x in members if x.area}
+    return len(areas) >= MIN_INVEST_AREAS
+
+
 def rebuild_groups(db: Session) -> Dict[str, int]:
     cols = (Listing.id, Listing.source, Listing.offer_type, Listing.url,
             Listing.external_url, Listing.rooms, Listing.area, Listing.floor,
             Listing.osiedle, Listing.osiedle_override, Listing.district,
             Listing.price_pln, Listing.is_active, Listing.first_image,
-            Listing.dedup_detached)
+            Listing.dedup_detached, Listing.market, Listing.seller_type)
     rows = db.execute(select(*cols)).all()
     uf = _UF()
     by_code: Dict[str, int] = {}
@@ -117,20 +148,25 @@ def rebuild_groups(db: Session) -> Dict[str, int]:
 
     updates = []
     groups = 0
+    investments = 0
     for root, lst in members.items():
         gid = "g%d" % min(x.id for x in lst)
         groups += 1
         active = [x for x in lst if x.is_active and x.price_pln]
         pool = active or [x for x in lst if x.price_pln] or lst
         rep = min(pool, key=lambda x: (x.price_pln or 1e18, x.id)).id
+        kind = "investment" if is_investment(active or lst) else None
+        if kind:
+            investments += 1
         for x in lst:
             updates.append({"id": x.id, "dedup_group": gid, "group_size": len(lst),
-                            "is_representative": x.id == rep})
+                            "is_representative": x.id == rep, "group_kind": kind})
     for i in range(0, len(updates), 2000):
         db.bulk_update_mappings(Listing, updates[i:i + 2000])
     db.commit()
     return {"listings": len(rows), "groups": groups, "mirror": linked_mirror,
-            "numeric": linked_numeric, "image": linked_image}
+            "numeric": linked_numeric, "image": linked_image,
+            "investments": investments}
 
 
 def detach(db: Session, listing_id: int) -> Optional[str]:

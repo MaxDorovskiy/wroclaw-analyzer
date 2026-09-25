@@ -247,3 +247,40 @@ def test_list_run_does_not_erase_condition_from_card(clean_db):
     db.commit()
     db.refresh(row)
     assert row.condition == "to_renovate"
+
+
+def test_developer_price_list_is_marked_as_investment(clean_db):
+    """Квартиры одной инвестиции по числам неразличимы: те же комнаты, тот же
+    этаж, площадь и цена в пределах погрешности ключа — и склейка собирает их
+    в одну карточку. На боевой базе 24.09.2026 самая большая такая группа —
+    32 квартиры 40,52…41,49 м² по 504–511 тыс. zł. Разобрать их обратно —
+    засорить каталог, оставить как есть — соврать подписью «ще 31 розміщення».
+    Поэтому группа помечается, а подпись меняется на «N квартир у цьому
+    будинку». Признак — число РАЗНЫХ точных площадей: одну квартиру, поданную
+    трижды, так не объяснить."""
+    db = clean_db
+    now = datetime.utcnow()
+    flats = []
+    for i in range(6):                       # 40.52, 40.60, 40.68 … — лесенка застройщика
+        flats.append(Listing(source="otodom", source_id="d%d" % i, offer_type="sale",
+                             url="https://x/d%d" % i, title_pl="Nowa inwestycja",
+                             rooms=2, area=40.52 + i * 0.08, floor=1, osiedle="Gaj",
+                             price_pln=505000 + i * 300, market="primary", seller_type="agency",
+                             seller_name="BIURO", is_active=True, first_seen=now, last_seen=now))
+    # та же квартира, поданная трижды: площадей всего две — это дубли, не инвестиция
+    for i in range(3):
+        flats.append(Listing(source="otodom", source_id="s%d" % i, offer_type="sale",
+                             url="https://x/s%d" % i, title_pl="Mieszkanie",
+                             rooms=3, area=60.0 if i < 2 else 60.1, floor=4, osiedle="Ołbin",
+                             price_pln=800000, market="primary", seller_type="agency",
+                             seller_name="BIURO", is_active=True, first_seen=now, last_seen=now))
+    db.add_all(flats)
+    db.commit()
+
+    stats = dedup.rebuild_groups(db)
+    assert stats["investments"] == 1
+
+    ladder = db.query(Listing).filter_by(source_id="d0").one()
+    assert ladder.group_size == 6 and ladder.group_kind == "investment"
+    repost = db.query(Listing).filter_by(source_id="s0").one()
+    assert repost.group_size == 3 and repost.group_kind is None
