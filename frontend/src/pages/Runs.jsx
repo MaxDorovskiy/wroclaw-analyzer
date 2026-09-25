@@ -79,6 +79,8 @@ export default function Runs({ summary, me }) {
           </span> : null}
           {jobs && <span style={{ marginLeft: 10 }}>
             · планувальник: {jobs.scheduler_running ? 'увімкнено' : (jobs.disabled_by_env ? 'вимкнено (розкладом керує система)' : 'вимкнено')}
+            {/* сторож закрывает зависший прогон; без него один висел трое суток */}
+            {jobs.watchdog_running === false && <span className="badge warn" style={{ marginLeft: 6 }}>сторож не працює</span>}
             {(jobs.jobs || []).length ? ' · ' + jobs.jobs.map(j => `${j.id} → ${fmtDateTime(j.next_run)}`).join(', ') : ''}
           </span>}
         </p>

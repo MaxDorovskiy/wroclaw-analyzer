@@ -1066,6 +1066,8 @@ def api_activity(user: Optional[str] = None, days: int = 14, limit: int = 300,
 
 # ---------- планировщик (только для разработки; в бою — Планировщик Windows) ----------
 scheduler = BackgroundScheduler(timezone=KYIV)
+# Сторож живёт отдельно от планировщика прогонов и включён ВСЕГДА — см. startup
+watchdog_scheduler = BackgroundScheduler(timezone=KYIV)
 
 
 def _sched_scrape(kind: str):
@@ -1086,9 +1088,17 @@ def _watchdog():
 
 @app.get("/api/jobs")
 def api_jobs():
+    # Сторож показываем вместе с остальными: на боевом ПК планировщик
+    # выключен (прогоны запускает Планировщик Windows), и раздел выглядел так,
+    # будто не работает ничего — включая сторожа, из-за отсутствия которого прогон
+    # висел в статусе running трое суток.
+    jobs = list(scheduler.get_jobs()) if scheduler.running else []
+    if watchdog_scheduler.running:
+        jobs += list(watchdog_scheduler.get_jobs())
     return {"scheduler_running": scheduler.running,
+            "watchdog_running": watchdog_scheduler.running,
             "disabled_by_env": os.environ.get("DISABLE_SCHEDULER") == "1",
-            "jobs": [{"id": j.id, "next_run": j.next_run_time} for j in scheduler.get_jobs()] if scheduler.running else []}
+            "jobs": [{"id": j.id, "next_run": j.next_run_time} for j in jobs]}
 
 
 def migrate_favorites(db: Session) -> int:
@@ -1118,9 +1128,12 @@ def _startup():
     # Сторож живёт ВСЕГДА: он не скрапит, а закрывает зависшие строки. Раньше он
     # выключался вместе с планировщиком (DISABLE_SCHEDULER=1 — это бой), и прогон,
     # оборванный перезапуском 20.09.2026, висел «running» трое суток.
-    watchdog = BackgroundScheduler(timezone=KYIV)
-    watchdog.add_job(_watchdog, "interval", minutes=10, id="watchdog")
-    watchdog.start()
+    # replace_existing: планировщик теперь модульный (его видит /api/jobs), а
+    # startup в тестах вызывается не один раз
+    watchdog_scheduler.add_job(_watchdog, "interval", minutes=10, id="watchdog",
+                               replace_existing=True)
+    if not watchdog_scheduler.running:
+        watchdog_scheduler.start()
     if os.environ.get("DISABLE_SCHEDULER") != "1":
         for h in SCAN_HOURS_SALE:
             scheduler.add_job(lambda: _sched_scrape("sale"), CronTrigger(hour=h, minute=0), id="sale_%d" % h)
