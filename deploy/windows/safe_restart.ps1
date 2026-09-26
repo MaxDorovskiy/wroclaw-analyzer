@@ -20,14 +20,39 @@ function Health() {
     try { return Invoke-RestMethod -Uri "http://127.0.0.1:$port/api/health" -TimeoutSec 20 } catch { return $null }
 }
 
+# Молчание сервера — НЕ доказательство, что он умер. Пока идёт прогон, сводка
+# по 21 тыс. строк ждёт писателя SQLite и может не ответить за 20 с. 26.09.2026 скрипт
+# принял это за «сервер не отвечает — перезапускаю» и оборвал продажу №27 на 9369
+# объявлениях из 11 300 — ровно то, ради чего этот скрипт и написан.
+# Второе мнение — по базе: строка running со свежей отметкой жизни.
+function ScrapeAliveByDb() {
+    $py = Join-Path $PSScriptRoot "..\..\.venv\Scripts\python.exe"
+    $checker = Join-Path $PSScriptRoot "..\..\scripts\scrape_alive.py"
+    if (-not (Test-Path $py) -or -not (Test-Path $checker)) { return $null }
+    $out = & $py $checker 2>&1
+    $code = $LASTEXITCODE
+    if ($code -eq 0) { Write-Host "  по базе: $out"; return $true }
+    if ($code -eq 1) { return $false }
+    Write-Host "  по базе определить не удалось: $out" -ForegroundColor Yellow
+    return $null
+}
+
 while ($true) {
     try {
         $s = Invoke-RestMethod -Uri "http://127.0.0.1:$port/api/summary" -Headers $headers -TimeoutSec 20
     } catch {
-        Write-Host "сервер не отвечает ($($_.Exception.Message)) — перезапускаю"
+        Write-Host "сводка не ответила ($($_.Exception.Message)) — смотрю в базу, не идёт ли прогон"
         $s = $null
     }
-    if ($s -and $s.scrape_running) {
+    $running = if ($s) { [bool]$s.scrape_running } else { ScrapeAliveByDb }
+    if ($null -eq $running) {
+        # ни HTTP, ни база не ответили — лучше не трогать, чем оборвать прогон
+        Write-Host "НЕ ПОНЯТНО, ИДЁТ ЛИ ПРОГОН (ни HTTP, ни база). Перезапуск отменён." -ForegroundColor Red
+        Write-Host "Проверьте раздел «Прогони» и повторите." -ForegroundColor Yellow
+        exit 1
+    }
+    if ($running) {
+        if (-not $s) { Write-Host "сервер не отвечает по HTTP, НО прогон жив — не трогаю" }
         if (-not $Wait) { Write-Host "ИДЁТ ПРОГОН — перезапуск отменён. Дождитесь окончания или запустите с -Wait"; exit 1 }
         Write-Host "идёт прогон, жду 5 мин..."; Start-Sleep -Seconds 300; continue
     }
