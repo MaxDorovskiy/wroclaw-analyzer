@@ -128,6 +128,14 @@ export default function Runs({ summary, me }) {
             <div className="card"><div className="label">Перекладено</div><div className="value">{fmtNum(ts.done_total)}</div><div className="sub">сьогодні: {fmtNum(ts.done_today)}</div></div>
           </div>
         ) : <p className="muted">Статус перекладу недоступний</p>}
+        {/* Очередь может часами стоять в очереди к видеокарте: без этой строки
+            выглядело бы как «перевод идёт, но ничего не переводится» */}
+        {ts?.gpu_wait && (
+          <p className="hint" style={{ marginTop: 0 }}>
+            ⚙ Черга чекає на відеокарту — {String(ts.gpu_wait).replace(/^gpu: жду — ?/, '')}.
+            {' '}Переклади мають найнижчий пріоритет і доженуть самі.
+          </p>
+        )}
         {ts?.last_error && <div className="error-box"><b>Остання помилка перекладу:</b> {ts.last_error}</div>}
         {canAct && <div className="row">
           <label className="chk">не більше
@@ -135,7 +143,9 @@ export default function Runs({ summary, me }) {
           </label>
           <button className="btn" disabled={!!busy || ts?.running}
             onClick={() => run('translate', () => api.translateRun(limit), 'Переклад черги запущено у фоні')}>
-            {ts?.running ? <span><span className="spin" />перекладаємо…</span> : 'Перекласти чергу'}
+            {ts?.running
+              ? <span><span className="spin" />{ts.gpu_wait ? 'чекаємо відеокарту…' : 'перекладаємо…'}</span>
+              : 'Перекласти чергу'}
           </button>
         </div>}
       </div>

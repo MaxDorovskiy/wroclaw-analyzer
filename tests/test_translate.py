@@ -100,3 +100,62 @@ def test_ollama_context_comes_from_settings(monkeypatch):
     assert sent[0]["options"]["num_ctx"] == 16384 and sent[0]["model"] == "qwen3.5:9b-q4_K_M"
     assert translate.get_provider({"translate_provider": "ollama"}).num_ctx == 8192            # по умолчанию
     assert translate.get_provider({"translate_provider": "ollama", "translate_ollama_num_ctx": "x"}).num_ctx == 8192
+
+
+def test_gpu_lease_only_for_our_card(clean_db, monkeypatch):
+    """Видеокарта одна на все проекты владельца, очередь ведёт реестр заявок.
+
+    26.09.2026 в 06:06 наши ночные переводы (gemma4:12b) и фоновая проверка
+    re-analyzer (qwen3.5:9b с мака) выгружали модели друг друга 6 раз за две
+    минуты: две модели по 8-10 ГБ в 16 ГБ не помещаются. Теперь очередь идёт
+    под заявкой, и перед каждым объявлением спрашивается реестр.
+
+    Заявка нужна ТОЛЬКО когда считает наша карта: у anthropic/google/deepl
+    счёт идёт на чужих машинах, занимать очередь незачем."""
+    from app.settings_store import set_setting
+
+    db = clean_db
+    db.add(Listing(source="otodom", source_id="1", offer_type="sale",
+                   title_pl=u"Mieszkanie", is_active=True))
+    db.add(Listing(source="otodom", source_id="2", offer_type="sale",
+                   title_pl=u"Kawalerka", is_active=True))
+    db.commit()
+    monkeypatch.setattr(translate, "get_provider", lambda settings: Fake())
+    set_setting(db, "translate_enabled", "1")
+
+    # 1. провайдер не ollama — реестр вообще не трогаем
+    set_setting(db, "translate_provider", "deepl")
+    assert translate.gpu_for({"translate_provider": "deepl"}) is None
+
+    # 2. ollama — клиент берёт модель ИЗ НАСТРОЕК: реестр по этому списку
+    #    решает, что нам можно выгружать, а чужое трогать нельзя никогда
+    gpu = translate.gpu_for({"translate_provider": "ollama",
+                             "translate_ollama_model": "gemma4:12b-it-q4_K_M"})
+    assert gpu is not None and gpu.models == ["gemma4:12b-it-q4_K_M"]
+    assert gpu.project == "wroclaw-analyzer"
+
+    # 3. очередь идёт под заявкой, checkpoint — перед КАЖДЫМ объявлением
+    seen = {"priority": None, "vram": None, "checks": 0, "released": False}
+
+    class FakeLease:
+        def __enter__(self):
+            return self
+
+        def checkpoint(self, every=60):
+            seen["checks"] += 1
+
+        def __exit__(self, *exc):
+            seen["released"] = True
+            return False
+
+    class FakeGpu:
+        def lease(self, priority=None, note="", vram_gb=None, **kw):
+            seen["priority"], seen["vram"] = priority, vram_gb
+            return FakeLease()
+
+    monkeypatch.setattr(translate, "gpu_for", lambda settings: FakeGpu())
+    out = translate.translate_pending(db, manual=True)
+    assert out.startswith(u"заголовков 2")
+    assert seen["checks"] == 2
+    assert seen["priority"] == 50 and seen["vram"] == translate.GPU_VRAM_GB
+    assert seen["released"] is True           # заявка снята: равные приоритеты идут по очереди

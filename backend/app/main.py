@@ -617,9 +617,16 @@ def api_translate_one(request: Request, lid: int, db: Session = Depends(get_db))
     l = db.get(Listing, lid)
     if l is None:
         raise HTTPException(404)
-    provider = translate.get_provider(get_settings(db))
+    settings = get_settings(db)
+    provider = translate.get_provider(settings)
     if provider is None:
         raise HTTPException(400, u"провайдер перекладу не налаштований (Налаштування)")
+    # Владелец нажал кнопку и ждёт ответа — это приоритет 10, выше нашего фона,
+    # но если карту занял кто-то ещё важнее — ждём минуту и честно говорим, кто
+    # её держит. Держать браузер дольше бессмысленно: ответ нужен сейчас.
+    gpu = translate.gpu_for(settings)
+    if gpu is not None and not gpu.wait_turn(priority=translate.GPU_PRIORITY_ASK, max_wait=60):
+        raise HTTPException(503, u"відеокарта зайнята: %s" % gpu.can_run(translate.GPU_PRIORITY_ASK)[1])
     try:
         # перевод прежней версии подсказки кнопка обновляет: иначе устаревшее не освежить
         stale = l.translate_version != translate.PROMPT_VERSION
@@ -1123,6 +1130,10 @@ def _startup():
     try:
         scraper.close_stale_runs(db, orphans=True)
         migrate_favorites(db)
+        # Список моделей в реестре видеокарты — это разрешение выгружать именно нашу
+        # модель; если он отстанет от настройки, мы либо не сможем уступить по-честному,
+        # либо тронем чужую. Реестр не ответил — не повод не стартовать.
+        translate.gpu_register(get_settings(db))
     finally:
         db.close()
     # Сторож живёт ВСЕГДА: он не скрапит, а закрывает зависшие строки. Раньше он

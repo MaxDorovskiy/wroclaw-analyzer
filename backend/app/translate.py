@@ -26,6 +26,7 @@ import httpx
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from .gpu_client import GpuClient
 from .models import Listing, Translation
 from .settings_store import get_settings
 
@@ -89,7 +90,7 @@ SYSTEM_PROMPT = (
     u"Відповідай ЛИШЕ перекладом, без вступу.\nСловник термінів:\n" + GLOSSARY
 )
 CHUNK_CHARS = 2500
-_state = {"running": False, "last_error": None, "lock": threading.Lock()}
+_state = {"running": False, "last_error": None, "gpu": None, "lock": threading.Lock()}
 
 
 def _hash(text: str) -> str:
@@ -193,6 +194,73 @@ class DeepLProvider(Provider):
         return [t["text"] for t in r.json()["translations"]]
 
 
+# ---------- очередь к видеокарте ----------
+# Карта одна на все проекты владельца, очередь ведёт реестр заявок
+# (CLAUDE.md, «Общая видеокарта»). 26.09.2026 в 06:06 наши ночные переводы и
+# фоновая проверка re-analyzer выгружали модели друг друга 6 раз за 2 минуты:
+# две модели по 8-10 ГБ в 16 ГБ не помещаются.
+GPU_PROJECT = "wroclaw-analyzer"
+GPU_PRIORITY_BG = 50        # фон, самый низкий: решение владельца 26.09.2026
+GPU_PRIORITY_ASK = 10       # владелец нажал «Перекласти» и ждёт ответа сейчас
+GPU_VRAM_GB = 9             # gemma4:12b-it-q4_K_M при num_ctx=8192 — 8,4 ГБ по `ollama ps`
+
+
+def gpu_for(settings: Dict[str, str]) -> Optional[GpuClient]:
+    """Клиент реестра — только когда переводит НАША видеокарта.
+
+    У anthropic / google / deepl счёт идёт на чужих машинах — занимать очередь
+    было бы просто невежливо к остальным. Адрес Ollama берём из настройки, имя
+    модели тоже: реестр по этому списку решает, что нам можно выгружать."""
+    if (settings.get("translate_provider") or "").strip() != "ollama":
+        return None
+    ollama = settings.get("translate_ollama_url") or "http://127.0.0.1:11434"
+    model = settings.get("translate_ollama_model") or "gemma3:12b"
+    registry = settings.get("gpu_registry_url") or "http://127.0.0.1:11435"
+    return GpuClient(GPU_PROJECT, models=[model], registry=registry,
+                     ollama=ollama, log=_gpu_log)
+
+
+def _gpu_log(msg: str) -> None:
+    """Сообщения клиента реестра видны в разделе «Прогони».
+
+    Без этого очередь часами числилась «іде», пока на самом деле ждала
+    чужой заявки, и понять это можно было только из журнала сервера."""
+    log.info("%s", msg)
+    _state["gpu"] = msg if str(msg).startswith("gpu: жду") else None
+
+
+def gpu_register(settings: Dict[str, str]) -> Optional[str]:
+    """Держать свою запись в реестре актуальной (правило 5 в COMMON.md).
+
+    Список моделей — это разрешение выгружать: реестр считает своей ту
+    модель, которую назвал только один проект. Если владелец сменит
+    `translate_ollama_model`, а в реестре останется старое имя — мы либо не сможем
+    выгрузить свою модель, либо выгрузим чужую.
+
+    Пишем ТОЛЬКО при расхождении: описание в реестре может править владелец
+    из интерфейса, и затирать его на каждом старте невежливо."""
+    gpu = gpu_for(settings)
+    if gpu is None:
+        return None
+    try:
+        mine = (gpu.projects() or {}).get(GPU_PROJECT) or {}
+    except Exception as e:  # noqa: BLE001 — реестр может не отвечать, это не повод не стартовать
+        log.info("реестр видеокарты не ответил: %s", e)
+        return None
+    if list(mine.get("models") or []) == gpu.models and mine.get("priority") == GPU_PRIORITY_BG:
+        return None
+    try:
+        gpu.register(GPU_PRIORITY_BG,
+                     description=u"Wrocław Analyzer: перевод объявлений PL→UK. "
+                                 u"Фон, уступает всем.",
+                     host=u"ПК, 127.0.0.1")
+        log.info("в реестре видеокарты обновлены модели: %s", gpu.models)
+        return ", ".join(gpu.models)
+    except Exception as e:  # noqa: BLE001
+        log.info("запись в реестр видеокарты не удалась: %s", e)
+        return None
+
+
 def get_provider(settings: Dict[str, str]) -> Optional[Provider]:
     name = (settings.get("translate_provider") or "none").strip()
     if name == "ollama":
@@ -283,11 +351,30 @@ def pending_counts(db: Session) -> Dict[str, int]:
             "done_today": _done_today(db)}
 
 
+class _NoLease:
+    """Когда переводит не наша видеокарта (anthropic / google / deepl),
+    очередь к карте ни при чём — цикл остаётся один и тот же."""
+
+    def __enter__(self):
+        return self
+
+    def checkpoint(self, every=60):
+        pass
+
+    def __exit__(self, *exc):
+        return False
+
+
 def translate_pending(db: Session, limit: Optional[int] = None,
                       stop_check: Optional[Callable[[], bool]] = None, manual: bool = False) -> str:
     """Очередь: заголовки всех новых (короткие), потом описания в пределах
     суточного потолка, самые новые первыми. Три ошибки подряд — стоп: если
     Ollama выключена, нечего долбить её сотней запросов.
+
+    Работа долгая, поэтому идёт ПОД ЗАЯВКОЙ в реестре видеокарты с самым
+    низким приоритетом: перевод догонит сам, а человек ждать не должен.
+    `checkpoint()` перед каждым объявлением спрашивает реестр раз в минуту; карту
+    забрали — клиент выгрузит нашу модель и подождёт.
 
     translate_enabled выключает АВТОперевод после прогона. Кнопка «Перекласти
     чергу» и translate_backlog.py (manual=True) — явное действие владельца: при
@@ -308,51 +395,58 @@ def translate_pending(db: Session, limit: Optional[int] = None,
         cap = 800
     done_t = done_d = 0
     errors = 0
+    gpu = gpu_for(settings)
+    note = u"перевод черги по кнопке" if manual else u"перевод очереди после прогона"
     try:
-        # свежие — по дате подачи (см. тот же довод в scraper._scrape_details): по first_seen
-        # первая очередь из 20 целиком ушла на одну инвестицию с последней страницы выдачи
-        fresh = (Listing.is_representative.desc(), Listing.posted_at.desc(), Listing.first_seen.desc())
-        q = (db.query(Listing).filter(Listing.is_active.is_(True), Listing.title_pl.isnot(None),
-                                      Listing.title_uk.is_(None))
-             .order_by(*fresh).limit(limit or 3000))
-        for row in q.all():
-            if stop_check and stop_check():
-                break
-            try:
-                translate_listing(db, row, provider, with_description=False)
-                done_t += 1
-                errors = 0
-            except Exception as e:  # noqa: BLE001
-                db.rollback()
-                errors += 1
-                _state["last_error"] = str(e)[:300]
-                log.warning("перевод заголовка %s: %s", row.id, e)
-                if errors >= 3:
-                    return u"заголовков %d, остановлено после 3 ошибок: %s" % (done_t, e)
-        budget = max(0, cap - _done_today(db))
-        if limit:
-            budget = min(budget, limit)
-        q = (db.query(Listing).filter(Listing.is_active.is_(True), Listing.description_pl.isnot(None),
-                                      Listing.description_uk.is_(None))
-             .order_by(*fresh).limit(budget))
-        for row in q.all():
-            if stop_check and stop_check():
-                break
-            try:
-                translate_listing(db, row, provider)
-                done_d += 1
-                errors = 0
-            except Exception as e:  # noqa: BLE001
-                db.rollback()
-                errors += 1
-                _state["last_error"] = str(e)[:300]
-                log.warning("перевод описания %s: %s", row.id, e)
-                if errors >= 3:
-                    return u"заголовков %d, описаний %d, остановлено после 3 ошибок: %s" % (done_t, done_d, e)
+        with (gpu.lease(priority=GPU_PRIORITY_BG, note=note, vram_gb=GPU_VRAM_GB)
+              if gpu is not None else _NoLease()) as lease:
+            # свежие — по дате подачи (см. тот же довод в scraper._scrape_details): по first_seen
+            # первая очередь из 20 целиком ушла на одну инвестицию с последней страницы выдачи
+            fresh = (Listing.is_representative.desc(), Listing.posted_at.desc(), Listing.first_seen.desc())
+            q = (db.query(Listing).filter(Listing.is_active.is_(True), Listing.title_pl.isnot(None),
+                                          Listing.title_uk.is_(None))
+                 .order_by(*fresh).limit(limit or 3000))
+            for row in q.all():
+                if stop_check and stop_check():
+                    break
+                lease.checkpoint()
+                try:
+                    translate_listing(db, row, provider, with_description=False)
+                    done_t += 1
+                    errors = 0
+                except Exception as e:  # noqa: BLE001
+                    db.rollback()
+                    errors += 1
+                    _state["last_error"] = str(e)[:300]
+                    log.warning("перевод заголовка %s: %s", row.id, e)
+                    if errors >= 3:
+                        return u"заголовков %d, остановлено после 3 ошибок: %s" % (done_t, e)
+            budget = max(0, cap - _done_today(db))
+            if limit:
+                budget = min(budget, limit)
+            q = (db.query(Listing).filter(Listing.is_active.is_(True), Listing.description_pl.isnot(None),
+                                          Listing.description_uk.is_(None))
+                 .order_by(*fresh).limit(budget))
+            for row in q.all():
+                if stop_check and stop_check():
+                    break
+                lease.checkpoint()
+                try:
+                    translate_listing(db, row, provider)
+                    done_d += 1
+                    errors = 0
+                except Exception as e:  # noqa: BLE001
+                    db.rollback()
+                    errors += 1
+                    _state["last_error"] = str(e)[:300]
+                    log.warning("перевод описания %s: %s", row.id, e)
+                    if errors >= 3:
+                        return u"заголовков %d, описаний %d, остановлено после 3 ошибок: %s" % (done_t, done_d, e)
         _state["last_error"] = None
         return u"заголовков %d, описаний %d (потолок %d/сутки)" % (done_t, done_d, cap)
     finally:
         _state["running"] = False
+        _state["gpu"] = None
 
 
 def status(db: Session) -> Dict:
@@ -363,5 +457,7 @@ def status(db: Session) -> Dict:
                 "model": p.model if p else None,
                 "enabled": settings.get("translate_enabled") == "1",
                 "running": _state["running"], "last_error": _state["last_error"],
+                # не None — очередь стоит в очереди к видеокарте, в тексте — кто её держит
+                "gpu_wait": _state["gpu"],
                 "prompt_version": PROMPT_VERSION})
     return out
