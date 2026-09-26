@@ -127,14 +127,22 @@ def test_gpu_lease_only_for_our_card(clean_db, monkeypatch):
     set_setting(db, "translate_provider", "deepl")
     assert translate.gpu_for({"translate_provider": "deepl"}) is None
 
-    # 2. ollama — клиент берёт модель ИЗ НАСТРОЕК: реестр по этому списку
-    #    решает, что нам можно выгружать, а чужое трогать нельзя никогда
+    # 2. тесты не должны трогать боевой реестр (conftest: GPU_REGISTRY=off),
+    #    иначе старт приложения на временной базе перепишет там имя модели
+    assert translate.gpu_for({"translate_provider": "ollama",
+                              "translate_ollama_model": "gemma4:12b-it-q4_K_M"}) is None
+
+    # 3. клиент берёт модель ИЗ НАСТРОЕК: реестр по этому списку решает,
+    #    что нам можно выгружать, а чужое трогать нельзя никогда
+    monkeypatch.setenv("GPU_REGISTRY", "http://127.0.0.1:11435")
     gpu = translate.gpu_for({"translate_provider": "ollama",
                              "translate_ollama_model": "gemma4:12b-it-q4_K_M"})
     assert gpu is not None and gpu.models == ["gemma4:12b-it-q4_K_M"]
     assert gpu.project == "wroclaw-analyzer"
+    #    без имени модели заявку не подаём вовсе: честно назвать нечего
+    assert translate.gpu_for({"translate_provider": "ollama"}) is None
 
-    # 3. очередь идёт под заявкой, checkpoint — перед КАЖДЫМ объявлением
+    # 4. очередь идёт под заявкой, checkpoint — перед КАЖДЫМ объявлением
     seen = {"priority": None, "vram": None, "checks": 0, "released": False}
 
     class FakeLease:

@@ -17,6 +17,7 @@ PROMPT_VERSION: старые переводы станут «устаревши�
 import hashlib
 import html
 import logging
+import os
 import re
 import threading
 from datetime import datetime, timedelta
@@ -213,9 +214,19 @@ def gpu_for(settings: Dict[str, str]) -> Optional[GpuClient]:
     модели тоже: реестр по этому списку решает, что нам можно выгружать."""
     if (settings.get("translate_provider") or "").strip() != "ollama":
         return None
+    registry = os.environ.get("GPU_REGISTRY") or settings.get("gpu_registry_url")         or "http://127.0.0.1:11435"
+    # GPU_REGISTRY=off — реестра нет и трогать его нельзя. Так стоит в тестах:
+    # они гоняют старт приложения на временной базе, и 26.09.2026 такой старт
+    # записал в БОЕВОЙ реестр запасное имя модели вместо настоящего.
+    if registry.strip().lower() in ("", "off", "none"):
+        return None
+    # Модель берём ТОЛЬКО из настройки. Запасное имя здесь опасно: список
+    # моделей в реестре — это разрешение выгружать именно её, и назвать не ту —
+    # значит либо не суметь уступить, либо тронуть чужую.
+    model = (settings.get("translate_ollama_model") or "").strip()
+    if not model:
+        return None
     ollama = settings.get("translate_ollama_url") or "http://127.0.0.1:11434"
-    model = settings.get("translate_ollama_model") or "gemma3:12b"
-    registry = settings.get("gpu_registry_url") or "http://127.0.0.1:11435"
     return GpuClient(GPU_PROJECT, models=[model], registry=registry,
                      ollama=ollama, log=_gpu_log)
 
