@@ -143,7 +143,7 @@ def test_gpu_lease_only_for_our_card(clean_db, monkeypatch):
     assert translate.gpu_for({"translate_provider": "ollama"}) is None
 
     # 4. очередь идёт под заявкой, checkpoint — перед КАЖДЫМ объявлением
-    seen = {"priority": None, "vram": None, "checks": 0, "released": False}
+    seen = {"priority": "не звали", "vram": None, "checks": 0, "released": False}
 
     class FakeLease:
         def __enter__(self):
@@ -165,5 +165,7 @@ def test_gpu_lease_only_for_our_card(clean_db, monkeypatch):
     out = translate.translate_pending(db, manual=True)
     assert out.startswith(u"заголовков 2")
     assert seen["checks"] == 2
-    assert seen["priority"] == 50 and seen["vram"] == translate.GPU_VRAM_GB
+    # приоритет фоновой заявки владелец задаёт в реестре (27.09.2026 — 70,
+    # «после всех»); число из кода его бы перебило
+    assert seen["priority"] is None and seen["vram"] == translate.GPU_VRAM_GB
     assert seen["released"] is True           # заявка снята: равные приоритеты идут по очереди

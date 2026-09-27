@@ -66,5 +66,5 @@ Chromium (`playwright install chromium`, его ставит `install.ps1`).
 ## Проверка правок
 
 На КОПИИ базы: `sqlite3.backup()` → `data/wro-copy.db`, `WRO_DB=data/wro-copy.db`,
-порт 8021; фронтенд dev-сервером `VITE_API=http://127.0.0.1:8021 npm run dev -- --port 5175`.
+порт 8000; фронтенд dev-сервером `VITE_API=http://127.0.0.1:8000 npm run dev -- --port 5175`.
 Тесты — `.venv/bin/python -m pytest tests -q`.

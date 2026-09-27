@@ -201,7 +201,9 @@ class DeepLProvider(Provider):
 # фоновая проверка re-analyzer выгружали модели друг друга 6 раз за 2 минуты:
 # две модели по 8-10 ГБ в 16 ГБ не помещаются.
 GPU_PROJECT = "wroclaw-analyzer"
-GPU_PRIORITY_BG = 50        # фон, самый низкий: решение владельца 26.09.2026
+# Приоритет ФОНОВОЙ заявки здесь НЕ задаётся: его ставит владелец в реестре
+# (на 27.09.2026 — 70, «после всех»), и число в коде его бы перебивало.
+# Окна (23:00–07:00) тоже не наше дело: вне окна may_run сам ответит ok:false.
 GPU_PRIORITY_ASK = 10       # владелец нажал «Перекласти» и ждёт ответа сейчас
 GPU_VRAM_GB = 9             # gemma4:12b-it-q4_K_M при num_ctx=8192 — 8,4 ГБ по `ollama ps`
 
@@ -258,13 +260,14 @@ def gpu_register(settings: Dict[str, str]) -> Optional[str]:
     except Exception as e:  # noqa: BLE001 — реестр может не отвечать, это не повод не стартовать
         log.info("реестр видеокарты не ответил: %s", e)
         return None
-    if list(mine.get("models") or []) == gpu.models and mine.get("priority") == GPU_PRIORITY_BG:
+    if list(mine.get("models") or []) == gpu.models:
         return None
+    # Приоритет и пояснение — владельца, он меняет их в интерфейсе: возвращаем
+    # то, что уже записано. Меняем ТОЛЬКО список моделей — его знаем только мы.
     try:
-        gpu.register(GPU_PRIORITY_BG,
-                     description=u"Wrocław Analyzer: перевод объявлений PL→UK. "
-                                 u"Фон, уступает всем.",
-                     host=u"ПК, 127.0.0.1")
+        gpu.register(mine.get("priority"),
+                     description=mine.get("description") or u"Wrocław Analyzer: перевод объявлений PL→UK.",
+                     host=mine.get("host") or u"ПК, 127.0.0.1")
         log.info("в реестре видеокарты обновлены модели: %s", gpu.models)
         return ", ".join(gpu.models)
     except Exception as e:  # noqa: BLE001
@@ -409,7 +412,7 @@ def translate_pending(db: Session, limit: Optional[int] = None,
     gpu = gpu_for(settings)
     note = u"перевод черги по кнопке" if manual else u"перевод очереди после прогона"
     try:
-        with (gpu.lease(priority=GPU_PRIORITY_BG, note=note, vram_gb=GPU_VRAM_GB)
+        with (gpu.lease(note=note, vram_gb=GPU_VRAM_GB)
               if gpu is not None else _NoLease()) as lease:
             # свежие — по дате подачи (см. тот же довод в scraper._scrape_details): по first_seen
             # первая очередь из 20 целиком ушла на одну инвестицию с последней страницы выдачи

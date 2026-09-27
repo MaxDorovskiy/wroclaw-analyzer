@@ -727,19 +727,36 @@ def _cached(key: str, build, ttl: int = 300):
     return val
 
 
+def _summary_heavy(db: Session) -> Dict:
+    """Всё тяжёлое из сводки одним куском — чтобы кэшировать целиком."""
+    return {
+        "market": analytics.market_summary(db),
+        "translate": translate.status(db),
+        "sources": [{"source": s, "active": n, "last_seen": ls} for s, n, ls in db.execute(
+            select(Listing.source, func.count(), func.max(Listing.last_seen))
+            .where(Listing.is_active.is_(True)).group_by(Listing.source)).all()],
+    }
+
+
 @app.get("/api/summary")
 def api_summary(db: Session = Depends(get_db)):
+    """Шапка дёргает эту ручку постоянно, а она самая дорогая в системе.
+
+    В покое она отвечала 1,3 с, но под любой фоновой работой (прогон,
+    пересчёт) — 31–45 с: SQLite отдаёт писателю приоритет. Из-за этого
+    safe_restart.ps1 счёл сервер мёртвым и оборвал прогон №27 (26.09.2026).
+
+    Теперь тяжёлая часть кэшируется целиком на полминуты, а живыми остаются
+    только признаки, ради которых шапка и опрашивается часто: идёт ли прогон
+    и не стоит ли пауза. Они читаются из памяти и из одной строки настроек."""
     paused = scraper.paused_until(db)
-    sources = [{"source": s, "active": n, "last_seen": ls} for s, n, ls in db.execute(
-        select(Listing.source, func.count(), func.max(Listing.last_seen))
-        .where(Listing.is_active.is_(True)).group_by(Listing.source)).all()]
-    out = _cached("summary", lambda: analytics.market_summary(db), 120)
-    return dict(out, **{
+    heavy = _cached("summary", lambda: _summary_heavy(db), 30)
+    return dict(heavy["market"], **{
         "last_runs": {"sale": _run_dict(scraper.last_run(db, "sale")),
                       "rent": _run_dict(scraper.last_run(db, "rent"))},
         "scrape_running": scraper.is_running(), "current_run_id": scraper.current_run_id(),
-        "paused_until": _pause_value(paused), "translate": translate.status(db), "fx": fx.latest(db),
-        "sources": sources, "version": VERSION,
+        "paused_until": _pause_value(paused), "translate": heavy["translate"], "fx": fx.latest(db),
+        "sources": heavy["sources"], "version": VERSION,
     })
 
 
