@@ -20,6 +20,7 @@ import logging
 import os
 import re
 import threading
+import time
 from datetime import datetime, timedelta
 from typing import Callable, Dict, List, Optional
 
@@ -239,7 +240,14 @@ def _gpu_log(msg: str) -> None:
     Без этого очередь часами числилась «іде», пока на самом деле ждала
     чужой заявки, и понять это можно было только из журнала сервера."""
     log.info("%s", msg)
-    _state["gpu"] = msg if str(msg).startswith("gpu: жду") else None
+    # Только два события меняют состояние ожидания. Раньше любое другое сообщение
+    # («заявка продлена» раз в 30 мин) гасило причину, и в интерфейсе очередь
+    # выглядела работающей, пока на самом деле ждала.
+    text = str(msg)
+    if text.startswith("gpu: жду"):
+        _state["gpu"] = text
+    elif text.startswith("gpu: можно работать"):
+        _state["gpu"] = None
 
 
 def gpu_register(settings: Dict[str, str]) -> Optional[str]:
@@ -372,10 +380,69 @@ class _NoLease:
     def __enter__(self):
         return self
 
-    def checkpoint(self, every=60):
-        pass
+    def allowed(self):
+        return True
 
     def __exit__(self, *exc):
+        return False
+
+
+class _Claim:
+    """Заявка на видеокарту БЕЗ бесконечного ожидания.
+
+    Готовый `gpu_client.lease()` ждёт своей очереди столько, сколько потребуется,
+    и `checkpoint()` внутри цикла тоже. Для фона это неверно: окно тяжёлой работы
+    закрывается в 07:00, и поток вставал до 23:00. 09.10.2026 заявка, поданная
+    после прогона 11:00, висела 8,5 часа, держа место в очереди и сессию базы;
+    WAL за это время вырос до 601 МБ. Фону ждать не надо — он догонит в следующем
+    окне; повторная попытка — раз в час (main.py, сторожевой планировщик).
+
+    Правила реестра соблюдены: заявка на время работы с продлением, `may_run`
+    не реже раза в минуту, при потере очереди — выгрузить СВОЮ модель и снять
+    заявку в пределах минуты. Приоритет не указываем — его ставит владелец.
+    """
+
+    RENEW_SEC = 25 * 60       # заявка берётся на 1,5 ч — продлеваем с запасом
+    CHECK_SEC = 60            # правило: спрашивать реестр не реже раза в минуту
+
+    def __init__(self, gpu, note, vram_gb):
+        self.gpu, self.note, self.vram = gpu, note, vram_gb
+        self.why = ""
+        self._renewed = 0.0
+        self._checked = 0.0
+
+    def __enter__(self):
+        self.gpu.claim(note=self.note, vram_gb=self.vram)
+        self._renewed = self._checked = time.time()
+        return self
+
+    def allowed(self):
+        """Можно ли работать дальше. False — уступаем и выходим, не ждём."""
+        now = time.time()
+        if now - self._renewed > self.RENEW_SEC:
+            try:
+                self.gpu.claim(note=self.note, vram_gb=self.vram)
+                self._renewed = now
+            except Exception as e:  # noqa: BLE001 — реестр мог упасть; работу не рвём
+                log.info("gpu: продлить заявку не вышло: %s", e)
+        if now - self._checked < self.CHECK_SEC:
+            return True
+        self._checked = now
+        ok, why = self.gpu.can_run()
+        if not ok:
+            self.why = why
+            _state["gpu"] = "gpu: жду — " + why
+            try:
+                self.gpu.unload_mine(keep=self.gpu._holder_models(None))
+            except Exception:  # noqa: BLE001
+                pass
+        return ok
+
+    def __exit__(self, *exc):
+        try:
+            self.gpu.release()
+        except Exception:  # noqa: BLE001
+            pass
         return False
 
 
@@ -387,8 +454,8 @@ def translate_pending(db: Session, limit: Optional[int] = None,
 
     Работа долгая, поэтому идёт ПОД ЗАЯВКОЙ в реестре видеокарты с самым
     низким приоритетом: перевод догонит сам, а человек ждать не должен.
-    `checkpoint()` перед каждым объявлением спрашивает реестр раз в минуту; карту
-    забрали — клиент выгрузит нашу модель и подождёт.
+    Карту спрашиваем раз в минуту и НЕ ЖДЁМ: забрали — выгружаем свою модель,
+    снимаем заявку и выходим (см. _Claim). Очередь догонит в следующем окне.
 
     translate_enabled выключает АВТОперевод после прогона. Кнопка «Перекласти
     чергу» и translate_backlog.py (manual=True) — явное действие владельца: при
@@ -409,10 +476,21 @@ def translate_pending(db: Session, limit: Optional[int] = None,
         cap = 800
     done_t = done_d = 0
     errors = 0
+    yielded = False
     gpu = gpu_for(settings)
     note = u"перевод черги по кнопке" if manual else u"перевод очереди после прогона"
     try:
-        with (gpu.lease(note=note, vram_gb=GPU_VRAM_GB)
+        # Спрашиваем ДО заявки: иначе встанем в очередь и займём место на всю
+        # ночь впереди тех, кто подаст заявку позже, а сами будем стоять.
+        if gpu is not None:
+            ok, why = gpu.can_run()
+            if not ok:
+                # причина остаётся в состоянии ПОСЛЕ выхода — иначе в разделе
+                # «Прогони» не видно, почему очередь стоит на месте
+                _state["gpu"] = "gpu: жду — " + why
+                return u"видеокарта занята (%s) — догоним в следующем окне" % why
+            _state["gpu"] = None
+        with (_Claim(gpu, note, GPU_VRAM_GB)
               if gpu is not None else _NoLease()) as lease:
             # свежие — по дате подачи (см. тот же довод в scraper._scrape_details): по first_seen
             # первая очередь из 20 целиком ушла на одну инвестицию с последней страницы выдачи
@@ -423,7 +501,9 @@ def translate_pending(db: Session, limit: Optional[int] = None,
             for row in q.all():
                 if stop_check and stop_check():
                     break
-                lease.checkpoint()
+                if not lease.allowed():
+                    yielded = True
+                    break
                 try:
                     translate_listing(db, row, provider, with_description=False)
                     done_t += 1
@@ -444,7 +524,9 @@ def translate_pending(db: Session, limit: Optional[int] = None,
             for row in q.all():
                 if stop_check and stop_check():
                     break
-                lease.checkpoint()
+                if not lease.allowed():
+                    yielded = True
+                    break
                 try:
                     translate_listing(db, row, provider)
                     done_d += 1
@@ -457,10 +539,10 @@ def translate_pending(db: Session, limit: Optional[int] = None,
                     if errors >= 3:
                         return u"заголовков %d, описаний %d, остановлено после 3 ошибок: %s" % (done_t, done_d, e)
         _state["last_error"] = None
-        return u"заголовков %d, описаний %d (потолок %d/сутки)" % (done_t, done_d, cap)
+        tail = u", уступили видеокарту" if yielded else u""
+        return u"заголовков %d, описаний %d (потолок %d/сутки)%s" % (done_t, done_d, cap, tail)
     finally:
         _state["running"] = False
-        _state["gpu"] = None
 
 
 def status(db: Session) -> Dict:

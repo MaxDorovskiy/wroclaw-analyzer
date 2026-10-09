@@ -9,13 +9,18 @@ import ApiError from '../components/ApiError.jsx'
 // поставить. Здесь три списка, ради которых система и собиралась (SPEC §1):
 // что нового и дешевле рынка, у кого упала цена, где аренда отбивает лучше.
 
-function Kpi({ label, value, sub, onClick, title }) {
+function Kpi({ label, value, sub, onClick, title, loading }) {
   const Tag = onClick ? 'button' : 'div'
   return (
-    <Tag className="card" onClick={onClick} title={title} type={onClick ? 'button' : undefined}>
+    <Tag className="card" onClick={loading ? undefined : onClick} title={title}
+      type={onClick ? 'button' : undefined}>
       <div className="label">{label}</div>
-      <div className="value">{value}</div>
-      {sub && <div className="sub">{sub}</div>}
+      {/* Пока сводка едет, числа нет — и прочерк читался как «ничего нет».
+          Именно так главный экран и выглядел «нерабочим» (09.10.2026). */}
+      {loading
+        ? <div className="skeleton" style={{ height: 28, width: '60%', margin: '6px 0' }} />
+        : <div className="value">{value}</div>}
+      {sub && !loading && <div className="sub">{sub}</div>}
     </Tag>
   )
 }
@@ -74,7 +79,7 @@ export default function Dashboard({ summary, onOpen, goTo, me }) {
       // новые за сутки: у Юлии — просто новая аренда, у владельца — новое и дешевле рынка
       get(isViewer ? { first_seen_days: 1, sort: 'first_seen', order: 'desc' }
         : { first_seen_days: 1, only_deals: 1, sort: 'discount', order: 'desc' }),
-      get({ sort: 'price_drop', order: 'asc' }),
+      get({ dropped: 1, sort: 'price_drop', order: 'asc' }),
       isViewer ? Promise.resolve([]) : get({ yield_min: 6, sort: 'yield', order: 'desc' }),
     ]).then(([fresh, drops, yields]) => {
       if (!stop) setData({ fresh, drops, yields })
@@ -83,6 +88,7 @@ export default function Dashboard({ summary, onOpen, goTo, me }) {
   }, [kind, isViewer])
 
   const s = summary || {}
+  const waiting = !summary
   const sale = s.sale || {}
   const rent = s.rent || {}
   const tr = s.translate || {}
@@ -103,21 +109,21 @@ export default function Dashboard({ summary, onOpen, goTo, me }) {
       <ApiError err={err} prefix="Огляд завантажено не повністю" />
 
       <div className="cards">
-        <Kpi label="Активних у продажу" value={fmtNum(sale.active)}
+        <Kpi loading={waiting} label="Активних у продажу" value={fmtNum(sale.active)}
           sub={sale.new_24h != null ? `+${fmtNum(sale.new_24h)} за добу` : null}
           onClick={() => goTo('catalog', {})} title="Перейти до каталогу продажу" />
-        <Kpi label="Медіана, продаж" value={sale.median_sqm != null ? `${fmtNum(sale.median_sqm)} zł/м²` : '—'}
+        <Kpi loading={waiting} label="Медіана, продаж" value={sale.median_sqm != null ? `${fmtNum(sale.median_sqm)} zł/м²` : '—'}
           sub={sale.median_price != null ? `квартира ${fmtPln(sale.median_price)}` : null}
           onClick={() => goTo('stats', {})} title="Розрізи по осиедле і дзельницях" />
-        <Kpi label="Активних в оренді" value={fmtNum(rent.active)}
+        <Kpi loading={waiting} label="Активних в оренді" value={fmtNum(rent.active)}
           sub={rent.median_rent != null ? `медіана ${fmtPln(rent.median_rent)}/міс` : null}
           onClick={() => goTo('rent', {})} title="Перейти до оренди" />
         {!isViewer && (
-          <Kpi label="Вигідних зараз" value={fmtNum(sale.deals_count != null ? sale.deals_count : null)}
-            sub="знижка ≥ 10% до медіани"
+          <Kpi loading={waiting} label="Вигідних зараз" value={fmtNum(sale.deals_count)}
+            sub={`знижка ≥ ${fmtNum(sale.deals_threshold_pct ?? 10)}% до медіани`}
             onClick={() => goTo('deals', { preset: 'd10' })} title="Оголошення дешевші за схожі" />
         )}
-        <Kpi label="Знято за тиждень" value={fmtNum(sale.removed_7d)}
+        <Kpi loading={waiting} label="Знято за тиждень" value={fmtNum(sale.removed_7d)}
           sub="зникли з площадок" title="Рядки не видаляються — це спостереження про ринок" />
       </div>
 
@@ -135,7 +141,7 @@ export default function Dashboard({ summary, onOpen, goTo, me }) {
           title="Знизили ціну"
           hint="Найбільше зниження від першої побаченої нами ціни — ознака, що продавець готовий торгуватися."
           items={data.drops || []} loading={loading} onOpen={onOpen} lang={lang}
-          more={<button className="btn ghost small" onClick={() => goTo(kind, { sort: 'price_drop', order: 'asc' })}>усі</button>}
+          more={<button className="btn ghost small" onClick={() => goTo(kind, { dropped: 1, sort: 'price_drop', order: 'asc' })}>усі</button>}
           right={l => l.price_drop_pct != null && l.price_drop_pct < 0
             ? <span className="badge drop">▼ {fmtNum(Math.abs(l.price_drop_pct), 1)}%</span>
             : <span className="muted small">—</span>} />
@@ -161,9 +167,11 @@ export default function Dashboard({ summary, onOpen, goTo, me }) {
         </div>
         <div className="kv" style={{ marginBottom: 0 }}>
           <div><span className="k">Останній прогін: </span>
-            {lastRun && lastRun.finished_at
-              ? <>{fmtDateTime(lastRun.finished_at, { year: undefined })} <span className="muted">({fmtAgo(lastRun.finished_at)})</span></>
-              : <span className="muted">ще не було</span>}
+            {waiting
+              ? <span className="muted">завантажуємо…</span>
+              : lastRun && lastRun.finished_at
+                ? <>{fmtDateTime(lastRun.finished_at, { year: undefined })} <span className="muted">({fmtAgo(lastRun.finished_at)})</span></>
+                : <span className="muted">ще не було</span>}
           </div>
           <div><span className="k">Оголошень побачено: </span>{lastRun ? fmtNum(lastRun.seen) : '—'}
             {lastRun && lastRun.errors > 0 && <span className="badge warn" style={{ marginLeft: 6 }}>помилок {lastRun.errors}</span>}

@@ -122,6 +122,10 @@ class Listing(Base):
     rent_baseline_level = Column(String)
     rent_baseline_count = Column(Integer)
     yield_pct = Column(Float, index=True)
+    # Падение от ПЕРВОЙ увиденной нами цены, %. Считалось только на лету по
+    # price_history для показанной страницы, и потому по нему нельзя было ни
+    # сортировать, ни фильтровать (см. analytics.recompute_price_drops)
+    price_drop_pct = Column(Float, index=True)
     yield_investment_pln = Column(Float)
     yield_reno_cost_pln = Column(Float)
 

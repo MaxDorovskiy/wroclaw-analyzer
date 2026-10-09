@@ -335,6 +335,7 @@ def post_process(db: Session, run: Optional[ScrapeRun] = None, kind: str = "sale
         ("осиедле по координатам", lambda: geo_knn.fill_missing(db)),
         ("дубли", lambda: dedup.rebuild_groups(db)),
         ("курсы", lambda: (fx.refresh(db), fx.apply_to_listings(db))),
+        ("изменения цены", lambda: analytics.recompute_price_drops(db)),
         ("выгодность", lambda: analytics.recompute_deal_scores(db)),
         ("доходность", lambda: rent_analytics.recompute_yields(db)),
     ]

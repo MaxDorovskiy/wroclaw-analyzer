@@ -17,6 +17,7 @@ import secrets
 import threading
 from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -417,6 +418,10 @@ def _apply_filters(q, p: dict):
             q = q.filter(Listing.seller_id == sk)
     if p.get("first_seen_days") not in (None, ""):
         q = q.filter(Listing.first_seen >= datetime.utcnow() - timedelta(days=float(p["first_seen_days"])))
+    if str(p.get("dropped", "0")) == "1":
+        # только те, у кого цена ДЕЙСТВИТЕЛЬНО упала: без этого список
+        # «Знизили ціну» начинался с квартир, у которых цена не менялась (NULL впереди)
+        q = q.filter(Listing.price_drop_pct < 0)
     if str(p.get("only_deals", "0")) == "1":
         q = q.filter(Listing.discount_pct >= p.get("_deal_threshold", 10.0))
     if str(p.get("favorites", "0")) == "1":
@@ -435,7 +440,8 @@ def _apply_filters(q, p: dict):
 SORTS = {
     "discount": Listing.discount_pct, "price": Listing.price_pln, "price_sqm": Listing.price_per_m2,
     "posted": Listing.posted_at, "first_seen": Listing.first_seen, "area": Listing.area,
-    "yield": Listing.yield_pct, "price_drop": Listing.discount_pct, "last_seen": Listing.last_seen,
+    # было Listing.discount_pct — сортировка «Зміни ціни» молча сортировала по скидке
+    "yield": Listing.yield_pct, "price_drop": Listing.price_drop_pct, "last_seen": Listing.last_seen,
 }
 
 
@@ -715,16 +721,40 @@ def _run_dict(r: Optional[ScrapeRun]) -> Optional[dict]:
 _cache: Dict[str, tuple] = {}
 
 
-def _cached(key: str, build, ttl: int = 300):
+_cache_locks: Dict[str, threading.Lock] = {}
+_cache_guard = threading.Lock()
+
+
+def _cached(key: str, build, ttl: int = 300, stale_ok: int = 0):
     """Тяжёлые срезы считаются секунды, а страница зовёт их при каждом
-    открытии — держим 5 минут."""
+    открытии — держим 5 минут.
+
+    stale_ok — сколько секунд сверх ttl можно отдать УСТАРЕВШЕЕ значение,
+    пока свежее считается фоном. Для сводки это главное: счёт занимает
+    4 с в покое и до 45 с под нагрузкой, а всё это время главный экран стоял
+    с прочерками и выглядел как «сервер не работает» (жалоба 09.10.2026).
+
+    Считает ВСЕГДА ОДИН поток: без замка десять одновременных запросов
+    считали одно и то же десять раз и забивали базу."""
     now = datetime.utcnow()
     hit = _cache.get(key)
     if hit and (now - hit[0]).total_seconds() < ttl:
         return hit[1]
-    val = build()
-    _cache[key] = (now, val)
-    return val
+    with _cache_guard:
+        lock = _cache_locks.setdefault(key, threading.Lock())
+    if hit and stale_ok and not lock.acquire(blocking=False):
+        return hit[1]                      # кто-то уже считает — отдаём старое
+    if not (hit and stale_ok):
+        lock.acquire()
+    try:
+        hit = _cache.get(key)              # могли посчитать, пока ждали замка
+        if hit and (datetime.utcnow() - hit[0]).total_seconds() < ttl:
+            return hit[1]
+        val = build()
+        _cache[key] = (datetime.utcnow(), val)
+        return val
+    finally:
+        lock.release()
 
 
 def _summary_heavy(db: Session) -> Dict:
@@ -750,7 +780,7 @@ def api_summary(db: Session = Depends(get_db)):
     только признаки, ради которых шапка и опрашивается часто: идёт ли прогон
     и не стоит ли пауза. Они читаются из памяти и из одной строки настроек."""
     paused = scraper.paused_until(db)
-    heavy = _cached("summary", lambda: _summary_heavy(db), 30)
+    heavy = _cached("summary", lambda: _summary_heavy(db), 30, stale_ok=600)
     return dict(heavy["market"], **{
         "last_runs": {"sale": _run_dict(scraper.last_run(db, "sale")),
                       "rent": _run_dict(scraper.last_run(db, "rent"))},
@@ -1110,6 +1140,95 @@ def _watchdog():
         db.close()
 
 
+def _wal_checkpoint():
+    """Подрезать журнал SQLite (WAL).
+
+    При постоянном потоке читателей автоматический чекпойнт никогда не
+    доходит до усечения файла: 09.10.2026 при базе 989 МБ журнал занимал
+    601 МБ, хотя живых данных в нём было 3 страницы. TRUNCATE ничего не теряет:
+    он переносит страницы в базу и обрезает файл; если кто-то читает —
+    возвращает busy, и мы просто попробуем через 15 минут."""
+    if scraper.is_running():
+        return                      # во время прогона не мешаем писателю
+    db = SessionLocal()
+    try:
+        busy, total, done = db.execute(text("PRAGMA wal_checkpoint(TRUNCATE)")).first()
+        if busy:
+            log.info("WAL: чекпойнт не вышел (есть читатели), страниц в журнале %s", total)
+    except Exception as e:  # noqa: BLE001 — уборка не должна ронять сервер
+        log.warning("WAL: %s", e)
+    finally:
+        db.close()
+
+
+def _warm_summary():
+    """Считать сводку заранее, а не по приходу человека.
+
+    Главный экран и шапка ждут `/api/summary`. Пока она считалась (4 с в
+    покое, до 45 с во время прогона), все числа на странице стояли
+    прочерками — именно так и выглядит «сервер не работает»."""
+    db = SessionLocal()
+    try:
+        _cache.pop("summary", None)
+        _cached("summary", lambda: _summary_heavy(db), 30)
+    except Exception as e:  # noqa: BLE001
+        log.warning("подогрев сводки: %s", e)
+    finally:
+        db.close()
+
+
+def _backup_db():
+    """Ежедневная копия базы в WRO_DATA/backup, храним три последние.
+
+    Копии не было вообще ни одной (проверка 09.10.2026). Скрап повторить
+    можно, а вот историю цен за месяцы, ручные правки владельца, обране и
+    журнал — нет.
+
+    VACUUM INTO, а не копирование файла: он делает цельный снимок без WAL и
+    без пустого места, прямо на работающей базе и без блокировки писателей."""
+    if scraper.is_running():
+        return
+    out_dir = Path(DATA_DIR) / "backup"
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        dest = out_dir / ("wro-%s.db" % datetime.now(KYIV).strftime("%Y-%m-%d"))
+        if dest.exists():
+            return                           # сегодня уже делали
+        db = SessionLocal()
+        try:
+            db.execute(text("VACUUM INTO :p"), {"p": str(dest).replace("\\", "/")})
+        finally:
+            db.close()
+        old_files = sorted(out_dir.glob("wro-*.db"))[:-3]
+        for f in old_files:
+            f.unlink()
+        log.info("копия базы: %s (%.0f МБ), удалено старых %d",
+                 dest.name, dest.stat().st_size / 1e6, len(old_files))
+    except Exception as e:  # noqa: BLE001 — не смогли скопировать — не повод падать
+        log.error("копия базы не сделана: %s", e)
+
+
+def _translate_retry():
+    """Раз в час пытаться добить очередь перевода.
+
+    Раньше перевод запускался только после прогона, а из трёх прогонов
+    в ночное окно видеокарты (23:00–07:00) попадает один — аренда в 02:30.
+    Днём очередь упиралась в занятую карту и терялась до следующего прогона.
+    Здесь попытка дешёвая: вне окна реестр сразу отвечает «занято» и мы уходим.
+    Живёт в сторожевом планировщике: на боевом ПК обычный выключен."""
+    if scraper.is_running():
+        return                      # не лезем под руку прогону
+    db = SessionLocal()
+    try:
+        res = translate.translate_pending(db, stop_check=scraper._stop_requested)
+        if res not in (u"выключено", u"уже идёт"):
+            log.info("перевод по расписанию: %s", res)
+    except Exception as e:  # noqa: BLE001
+        log.error("перевод по расписанию: %s", e)
+    finally:
+        db.close()
+
+
 @app.get("/api/jobs")
 def api_jobs():
     # Сторож показываем вместе с остальными: на боевом ПК планировщик
@@ -1160,13 +1279,21 @@ def _startup():
     # startup в тестах вызывается не один раз
     watchdog_scheduler.add_job(_watchdog, "interval", minutes=10, id="watchdog",
                                replace_existing=True)
+    watchdog_scheduler.add_job(_wal_checkpoint, "interval", minutes=15, id="wal",
+                               replace_existing=True)
+    watchdog_scheduler.add_job(_warm_summary, "interval", seconds=25, id="summary-warm",
+                               replace_existing=True, next_run_time=datetime.now(KYIV))
+    watchdog_scheduler.add_job(_translate_retry, "interval", minutes=60, id="translate-retry",
+                               replace_existing=True)
+    # 04:30 — внутри ночного окна и после прогона аренды (02:30 + полчаса)
+    watchdog_scheduler.add_job(_backup_db, CronTrigger(hour=4, minute=30), id="backup",
+                               replace_existing=True)
     if not watchdog_scheduler.running:
         watchdog_scheduler.start()
     if os.environ.get("DISABLE_SCHEDULER") != "1":
         for h in SCAN_HOURS_SALE:
             scheduler.add_job(lambda: _sched_scrape("sale"), CronTrigger(hour=h, minute=0), id="sale_%d" % h)
         scheduler.add_job(lambda: _sched_scrape("rent"), CronTrigger(hour=SCAN_HOUR_RENT, minute=SCAN_MINUTE_RENT), id="rent")
-        scheduler.add_job(lambda: _bg(_translate_bg, None), "interval", hours=1, id="translate")
         scheduler.start()
         log.info("внутренний планировщик включён: %d заданий", len(scheduler.get_jobs()))
     else:

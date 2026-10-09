@@ -142,30 +142,52 @@ def test_gpu_lease_only_for_our_card(clean_db, monkeypatch):
     #    без имени модели заявку не подаём вовсе: честно назвать нечего
     assert translate.gpu_for({"translate_provider": "ollama"}) is None
 
-    # 4. очередь идёт под заявкой, checkpoint — перед КАЖДЫМ объявлением
-    seen = {"priority": "не звали", "vram": None, "checks": 0, "released": False}
-
-    class FakeLease:
-        def __enter__(self):
-            return self
-
-        def checkpoint(self, every=60):
-            seen["checks"] += 1
-
-        def __exit__(self, *exc):
-            seen["released"] = True
-            return False
+    # 4. очередь идёт под заявкой без приоритета и снимает её по окончании
+    seen = {"claims": [], "released": False, "checks": 0}
 
     class FakeGpu:
-        def lease(self, priority=None, note="", vram_gb=None, **kw):
-            seen["priority"], seen["vram"] = priority, vram_gb
-            return FakeLease()
+        models = ["gemma4:12b-it-q4_K_M"]
+
+        def can_run(self, priority=None):
+            seen["checks"] += 1
+            return True, "свободно"
+
+        def claim(self, hours=1.5, priority=None, note="", models=None, vram_gb=None):
+            seen["claims"].append({"priority": priority, "note": note, "vram": vram_gb})
+
+        def release(self):
+            seen["released"] = True
+
+        def unload_mine(self, keep=()):
+            pass
+
+        def _holder_models(self, priority):
+            return []
 
     monkeypatch.setattr(translate, "gpu_for", lambda settings: FakeGpu())
     out = translate.translate_pending(db, manual=True)
     assert out.startswith(u"заголовков 2")
-    assert seen["checks"] == 2
-    # приоритет фоновой заявки владелец задаёт в реестре (27.09.2026 — 70,
+    # приоритет фоновой заявки владелец задаёт в реестре (09.10.2026 — 70,
     # «после всех»); число из кода его бы перебило
-    assert seen["priority"] is None and seen["vram"] == translate.GPU_VRAM_GB
-    assert seen["released"] is True           # заявка снята: равные приоритеты идут по очереди
+    assert seen["claims"] and all(c["priority"] is None for c in seen["claims"])
+    assert seen["claims"][0]["vram"] == translate.GPU_VRAM_GB
+    assert seen["released"] is True           # заявка снята сразу, место в очереди не держим
+
+    # 5. карта занята — ЗАЯВКУ НЕ ПОДАЁМ и не ждём. До 09.10.2026 поток
+    #    вставал в ожидание до ночного окна: заявка висела 8,5 часа, сессия базы
+    #    оставалась открытой, WAL вырос до 601 МБ
+    busy = {"claims": 0}
+
+    class BusyGpu(FakeGpu):
+        def can_run(self, priority=None):
+            return False, u"карту держит «owner-window»"
+
+        def claim(self, **kw):
+            busy["claims"] += 1
+
+    monkeypatch.setattr(translate, "gpu_for", lambda settings: BusyGpu())
+    db.query(Listing).update({"title_uk": None})
+    db.commit()
+    out = translate.translate_pending(db, manual=True)
+    assert out.startswith(u"видеокарта занята") and busy["claims"] == 0
+    assert translate.status(db)["gpu_wait"]

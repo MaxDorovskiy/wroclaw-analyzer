@@ -152,8 +152,13 @@ def rebuild_groups(db: Session) -> Dict[str, int]:
     for root, lst in members.items():
         gid = "g%d" % min(x.id for x in lst)
         groups += 1
-        active = [x for x in lst if x.is_active and x.price_pln]
-        pool = active or [x for x in lst if x.price_pln] or lst
+        # Активное сильнее цены: у объявлений «запытайте о цене» цены нет вовсе,
+        # и представителем группы становилось СНЯТОЕ размещение — а живое исчезало
+        # из каталога (он показывает is_active И is_representative). На боевой базе
+        # 09.10.2026 так пряталась одна квартира (группа g7327).
+        active_priced = [x for x in lst if x.is_active and x.price_pln]
+        active = [x for x in lst if x.is_active]
+        pool = active_priced or active or [x for x in lst if x.price_pln] or lst
         rep = min(pool, key=lambda x: (x.price_pln or 1e18, x.id)).id
         kind = "investment" if is_investment(active or lst) else None
         if kind:

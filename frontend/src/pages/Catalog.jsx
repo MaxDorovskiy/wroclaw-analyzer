@@ -10,7 +10,8 @@ import ApiError from '../components/ApiError.jsx'
 // в JS истинно — галочка не снималась бы.
 const NUMERIC = new Set(['page', 'per_page', 'price_min', 'price_max', 'area_min', 'area_max',
   'sqm_min', 'sqm_max', 'build_year_min', 'build_year_max', 'floor_min', 'floor_max',
-  'discount_min', 'yield_min', 'only_deals', 'dupes', 'favorites', 'first_seen_days', 'has_phone'])
+  'discount_min', 'yield_min', 'only_deals', 'dropped', 'dupes', 'favorites', 'first_seen_days',
+  'has_phone'])
 
 function fromUrl(p) {
   const out = {}

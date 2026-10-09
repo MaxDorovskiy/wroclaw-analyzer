@@ -212,3 +212,107 @@ def test_users_roles_and_activity(clean_db, monkeypatch):
         assert act["per_user"]["yulia"] >= 3
         assert c.get("/api/me", **a).json()["users"] == ["admin", "yulia"]
         assert c.get("/api/health").status_code == 200                    # проверка живости без входа
+
+
+def test_yield_ignores_prices_that_are_not_flat_prices(clean_db):
+    """Доходность считалась для ЛЮБОЙ цены, лишь бы была площадь.
+
+    На боевой базе 09.10.2026 из-за этого в «Найкраща дохідність» на главном
+    экране первыми шли не квартиры: торговое место за 1500 zł (931% годовых),
+    доля 3/32 в квартире за 30 150 zł и объявление на 149 000 zł за 118 м²
+    (48,8%). У выгодности такой фильтр был с самого начала (_sane: 4–40 тыс.
+    zł/м²), у доходности — нет."""
+    from datetime import datetime
+
+    db = clean_db
+    now = datetime.utcnow()
+    # нормальная аренда, чтобы было с чем сравнивать
+    for i in range(8):
+        db.add(Listing(source="otodom", source_id="r%d" % i, offer_type="rent",
+                       url="https://x/r%d" % i, title_pl="Wynajem", rooms=2, area=50.0,
+                       price_pln=3000.0, osiedle="Gaj", district="Krzyki", is_active=True,
+                       is_representative=True, first_seen=now, last_seen=now))
+    normal = Listing(source="otodom", source_id="s1", offer_type="sale", url="https://x/s1",
+                     title_pl="Mieszkanie", rooms=2, area=50.0, price_pln=650000.0,
+                     osiedle="Gaj", district="Krzyki", is_active=True, is_representative=True,
+                     first_seen=now, last_seen=now)
+    junk = Listing(source="olx", source_id="s2", offer_type="sale", url="https://x/s2",
+                   title_pl="Sprzedam stoisko", rooms=1, area=14.0, price_pln=1500.0,
+                   osiedle="Gaj", district="Krzyki", is_active=True, is_representative=True,
+                   first_seen=now, last_seen=now)
+    db.add_all([normal, junk])
+    db.commit()
+
+    rent_analytics.recompute_yields(db)
+    db.refresh(normal)
+    db.refresh(junk)
+    assert normal.yield_pct is not None and 0 < normal.yield_pct < 30
+    assert junk.yield_pct is None          # 107 zł/м² — это не цена квартиры
+
+
+def test_group_representative_is_a_live_listing(clean_db):
+    """Представителем группы становилось СНЯТОЕ размещение, если цены нет ни
+    у кого: каталог показывает is_active И is_representative, и живая квартира
+    пропадала из выдачи. На боевой базе 09.10.2026 так пряталась группа g7327
+    («запытайте о цене» на обоих размещениях)."""
+    from datetime import datetime
+
+    db = clean_db
+    now = datetime.utcnow()
+    gone = Listing(source="otodom", source_id="g1", offer_type="sale",
+                   url="https://www.otodom.pl/pl/oferta/x-IDg1",
+                   title_pl="Mieszkanie", rooms=3, area=60.0, osiedle="Gaj", district="Krzyki",
+                   external_url=None, is_active=False, first_seen=now, last_seen=now)
+    live = Listing(source="olx", source_id="g2", offer_type="sale", url="https://x/g2",
+                   title_pl="Mieszkanie", rooms=3, area=60.0, osiedle="Gaj", district="Krzyki",
+                   external_url="https://www.otodom.pl/pl/oferta/x-IDg1", is_active=True,
+                   first_seen=now, last_seen=now)
+    db.add_all([gone, live])
+    db.commit()
+    # цены нет ни у одного — именно этот случай и ломался
+    dedup.rebuild_groups(db)
+    db.refresh(gone)
+    db.refresh(live)
+    assert gone.dedup_group == live.dedup_group        # склеились по зеркалу
+    assert live.is_representative is True and gone.is_representative is False
+
+
+def test_price_drop_is_stored_and_sortable(clean_db):
+    """Сортировка «Зміни ціни» была привязана к discount_pct — то есть молча
+    сортировала по скидке, а не по изменению цены. Падение считалось только
+    на лету по показанной странице и в базе не хранилось, поэтому блок
+    «Знизили ціну» на главном экране показывал квартиры, у которых цена вообще
+    не менялась (NULL идут первыми при сортировке по возрастанию)."""
+    from datetime import datetime, timedelta
+
+    from app.models import PriceHistory
+
+    db = clean_db
+    now = datetime.utcnow()
+    dropped = Listing(source="otodom", source_id="d1", offer_type="sale", url="https://x/d1",
+                      title_pl="Mieszkanie", rooms=2, area=50.0, price_pln=540000.0,
+                      is_active=True, is_representative=True, first_seen=now, last_seen=now)
+    steady = Listing(source="otodom", source_id="d2", offer_type="sale", url="https://x/d2",
+                     title_pl="Mieszkanie", rooms=2, area=50.0, price_pln=600000.0,
+                     is_active=True, is_representative=True, first_seen=now, last_seen=now)
+    db.add_all([dropped, steady])
+    db.commit()
+    db.add_all([
+        PriceHistory(listing_id=dropped.id, price_pln=600000.0, seen_at=now - timedelta(days=5)),
+        PriceHistory(listing_id=dropped.id, price_pln=540000.0, seen_at=now),
+        PriceHistory(listing_id=steady.id, price_pln=600000.0, seen_at=now - timedelta(days=5)),
+    ])
+    db.commit()
+
+    res = analytics.recompute_price_drops(db)
+    assert res["changed"] == 1
+    db.refresh(dropped)
+    db.refresh(steady)
+    assert dropped.price_drop_pct == -10.0
+    assert steady.price_drop_pct is None            # цена не менялась — это НЕ «ноль процентов»
+
+    client = TestClient(app)
+    r = client.get("/api/listings", params={"dropped": 1, "sort": "price_drop", "order": "asc"})
+    assert r.status_code == 200
+    ids = [x["id"] for x in r.json()["items"]]
+    assert ids == [dropped.id]                      # тот, у кого цена не менялась, в список не попал

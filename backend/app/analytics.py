@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from .config import MIN_AREA, SANE_SQM_RENT, SANE_SQM_SALE
 from .models import Listing, PriceHistory, ScrapeRun
-from .settings_store import set_setting
+from .settings_store import get_float, set_setting
 
 log = logging.getLogger("analytics")
 
@@ -210,6 +210,41 @@ def deal_explain(db: Session, listing_id: int) -> Optional[dict]:
 
 
 # ---------- сводка ----------
+def recompute_price_drops(db: Session) -> Dict:
+    """Записать в listings.price_drop_pct падение от первой увиденной цены.
+
+    Без этой колонки по падению цены нельзя было ни сортировать, ни
+    фильтровать: оно считалось только для показанной страницы. Сортировка
+    «Зміни ціни» при этом была привязана к discount_pct — то есть молча сортировала
+    по скидке, а блок «Знизили ціну» на главном экране показывал квартиры,
+    у которых цена не менялась ни разу (09.10.2026)."""
+    rows = db.execute(select(PriceHistory.listing_id, PriceHistory.price_pln)
+                      .order_by(PriceHistory.listing_id, PriceHistory.seen_at)).all()
+    first: Dict[int, float] = {}
+    last: Dict[int, float] = {}
+    seen: Dict[int, int] = {}
+    for lid, price in rows:
+        if price is None:
+            continue
+        first.setdefault(lid, price)
+        last[lid] = price
+        seen[lid] = seen.get(lid, 0) + 1
+    updates = []
+    changed = 0
+    for lid, n in seen.items():
+        # одна запись в истории — цена не менялась, это не «ноль процентов», а «нет данных»
+        pct = None
+        if n > 1 and first[lid]:
+            pct = round((last[lid] - first[lid]) / first[lid] * 100, 1)
+            changed += 1
+        # число смен цены у объявления не хранится: его считает _price_stats на страницу
+        updates.append({"id": lid, "price_drop_pct": pct})
+    for i in range(0, len(updates), 2000):
+        db.bulk_update_mappings(Listing, updates[i:i + 2000])
+    db.commit()
+    return {"listings": len(updates), "changed": changed}
+
+
 def market_summary(db: Session) -> Dict:
     now = datetime.utcnow()
     out = {}
@@ -229,6 +264,16 @@ def market_summary(db: Session) -> Dict:
             Listing.offer_type == offer_type, Listing.is_active.is_(False),
             Listing.removed_at >= now - timedelta(days=7))).scalar() or 0
         block["removed_7d"] = removed
+        if offer_type == "sale":
+            # Главный экран показывал «Вигідних зараз: —» с первого дня:
+            # число просто никто не считал. Порог — тот же, по которому
+            # работает фильтр only_deals (настройка deal_threshold_pct).
+            thr = get_float(db, "deal_threshold_pct", 10.0)
+            block["deals_count"] = db.execute(select(func.count()).select_from(Listing).where(
+                Listing.offer_type == "sale", Listing.is_active.is_(True),
+                Listing.is_representative.is_(True),
+                Listing.discount_pct >= thr)).scalar() or 0
+            block["deals_threshold_pct"] = thr
         if offer_type == "rent":
             block["median_rent"] = block.pop("median_price")
             block["median_rent_sqm"] = round(_median(sqm), 1) if sqm else None

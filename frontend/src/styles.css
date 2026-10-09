@@ -414,6 +414,12 @@ table.dupes tr.self td { background: var(--accent-soft); }
 .dash-list li { display: flex; gap: var(--s2); align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--grid); font-size: 13px; }
 .dash-list li:last-child { border-bottom: none; }
 .dash-list .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Строка списка — четыре части, и сжиматься при нехватке места должно
+   место, а не цифра: у длинных имён осиедле («Powstańców Śląskich»)
+   процент доходности выезжал за край панели */
+.dash-list li > .muted { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.dash-list li > b, .dash-list li > .badge { flex: none; margin-left: auto; }
+.dash-list li > .badge { margin-left: 0; }
 .kpi-delta { font-size: 12px; font-weight: 600; }
 .kpi-delta.up { color: var(--good-text); }
 .kpi-delta.down { color: var(--critical-ink); }

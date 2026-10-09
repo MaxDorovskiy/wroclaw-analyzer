@@ -88,7 +88,12 @@ def recompute_yields(db: Session) -> Dict:
         upd = {"id": r.id, "rent_median_pln": None, "rent_baseline_level": None,
                "rent_baseline_count": None, "yield_pct": None, "yield_investment_pln": None,
                "yield_reno_cost_pln": None}
-        if r.price_pln and r.area and r.area > 0:
+        # Тот же фильтр здравого смысла, что и у выгодности (4–40 тыс. zł/м²).
+        # Без него доля в квартире, торговое место или арендное объявление, попавшее
+        # в категорию продажи, получали доходность в десятки и сотни процентов и
+        # вставали первыми в «Найкраща дохідність» на главном экране.
+        # На боевой базе 09.10.2026: 149 000 zł за 118 м² — 48,8% годовых.
+        if _sane(r, "sale"):
             found = _find(pools, _rooms_key(r.rooms), r.osiedle_override or r.osiedle, r.district)
             if found:
                 level, n, med_sqm = found
