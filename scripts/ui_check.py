@@ -169,6 +169,7 @@ def run_scenario(errors, missing, served, out_dir):
         # viewer: закрытые ручки отвечают 403, как боевой сервер — если страница
         # их всё-таки дёрнет, 403 попадёт в консоль и завалит проверку
         if viewer_mode() and (url.path.startswith('/api/activity') or url.path == '/api/settings'
+                              or url.path.startswith('/api/questions')
                               or (request.method == 'POST' and (url.path.startswith('/api/scrape')
                                   or url.path in ('/api/recompute', '/api/translate/run')))):
             route.fulfill(status=403, content_type='application/json',
@@ -289,6 +290,15 @@ def run_scenario(errors, missing, served, out_dir):
         if '4+ кімн.' not in page.inner_text('table.grid'):
             errors.append('журнал: запит пошуку не розшифровано (rooms=4,5,…,10 → «4+ кімн.»)')
         shot('journal')
+
+        # вопросы владельцу: ждущие сверху, число на вкладке
+        go('#/questions', '.panel')
+        body = page.inner_text('body')
+        if '№' + '5' not in body:
+            errors.append('питання: нет того, что ждёт ответа (№5)')
+        if page.inner_text('.tab-count') != '1':
+            errors.append('питання: на вкладке не то число ожидающих')
+        shot('questions')
 
         # роль viewer: /api/me отдаёт другую фикстуру; роль читается при
         # старте приложения, поэтому страница перезагружается целиком

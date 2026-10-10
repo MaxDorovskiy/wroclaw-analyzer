@@ -28,7 +28,8 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
-from . import analytics, dedup, fx, geo, i18n, presentation, rent_analytics, scraper, translate
+from . import (analytics, dedup, fx, geo, i18n, presentation, questions, rent_analytics,
+               scraper, translate)
 from .config import (DATA_DIR, DB_PATH, FRONTEND_DIST, SAFE_KEYS, SCAN_HOUR_RENT,
                      SCAN_HOURS_SALE, SCAN_JITTER_SEC, SCAN_MINUTE_RENT, SECRET_KEYS,
                      SECRET_MASK, VERSION)
@@ -787,6 +788,9 @@ def api_summary(db: Session = Depends(get_db)):
         "scrape_running": scraper.is_running(), "current_run_id": scraper.current_run_id(),
         "paused_until": _pause_value(paused), "translate": heavy["translate"], "fx": fx.latest(db),
         "sources": heavy["sources"], "version": VERSION,
+        # число на вкладке «Питання»: без него раздел надо открывать,
+        # чтобы узнать, есть ли там что-то — и в него бы не заходили
+        "questions_open": questions.open_count(db),
     })
 
 
@@ -1230,6 +1234,37 @@ def _translate_retry():
         db.close()
 
 
+# ---------- вопросы владельцу ----------
+# Только администратору: это переписка владельца со мной, а не рабочий
+# инструмент риелтора.
+@app.get("/api/questions", dependencies=[Depends(require_admin)])
+def api_questions(db: Session = Depends(get_db)):
+    return {"items": questions.all_questions(db), "open": questions.open_count(db)}
+
+
+@app.post("/api/questions/{num}/answer", dependencies=[Depends(require_admin)])
+def api_question_answer(request: Request, num: int, body: dict, db: Session = Depends(get_db)):
+    text = (body or {}).get("answer") or ""
+    if not text.strip():
+        raise HTTPException(400, u"відповідь порожня")
+    q = questions.answer(db, num, text)
+    if q is None:
+        raise HTTPException(404, u"питання №%d немає" % num)
+    _log_action(db, None, "question_answer", {"num": num}, request)
+    db.commit()
+    return q
+
+
+@app.post("/api/questions/{num}/status", dependencies=[Depends(require_admin)])
+def api_question_status(request: Request, num: int, body: dict, db: Session = Depends(get_db)):
+    q = questions.set_status(db, num, (body or {}).get("status") or "")
+    if q is None:
+        raise HTTPException(400, u"статус або питання не підходять")
+    _log_action(db, None, "question_status", {"num": num, "status": q["status"]}, request)
+    db.commit()
+    return q
+
+
 @app.get("/api/jobs")
 def api_jobs():
     # Сторож показываем вместе с остальными: на боевом ПК планировщик
@@ -1267,6 +1302,7 @@ def _startup():
     try:
         scraper.close_stale_runs(db, orphans=True)
         migrate_favorites(db)
+        questions.seed(db)
         # Список моделей в реестре видеокарты — это разрешение выгружать именно нашу
         # модель; если он отстанет от настройки, мы либо не сможем уступить по-честному,
         # либо тронем чужую. Реестр не ответил — не повод не стартовать.

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Catalog from './pages/Catalog.jsx'
 import Dashboard from './pages/Dashboard.jsx'
+import Questions from './pages/Questions.jsx'
 import Deals from './pages/Deals.jsx'
 import Rent from './pages/Rent.jsx'
 import Contacts from './pages/Contacts.jsx'
@@ -27,6 +28,7 @@ const TABS = [
   ['stats', 'Статистика'],
   ['runs', 'Прогони'],
   ['journal', 'Журнал'],
+  ['questions', 'Питання'],
   ['settings', 'Налаштування'],
 ]
 const TAB_IDS = TABS.map(([id]) => id)
@@ -35,8 +37,8 @@ const TAB_IDS = TABS.map(([id]) => id)
 // «Прогони» открываются в режиме чтения (GET /api/runs ей разрешён, спрятаны
 // только кнопки). Сервер на закрытые ручки отвечает 403 и без нас — здесь
 // лишь чтобы не показывать мёртвые кнопки.
-const ADMIN_TABS = new Set(['journal', 'runs', 'settings'])
-const ADMIN_ONLY_PAGES = new Set(['journal', 'settings'])
+const ADMIN_TABS = new Set(['journal', 'questions', 'runs', 'settings'])
+const ADMIN_ONLY_PAGES = new Set(['journal', 'questions', 'settings'])
 
 // ---------- адресация ----------
 // Хэш, а не «настоящие» пути: сервер отдаёт статику из frontend/dist, и путь
@@ -170,7 +172,7 @@ export default function App() {
 
   const Page = {
     home: Dashboard, catalog: Catalog, deals: Deals, rent: Rent, favorites: Favorites, contacts: Contacts,
-    stats: Stats, runs: Runs, journal: Journal, settings: Settings,
+    stats: Stats, runs: Runs, journal: Journal, questions: Questions, settings: Settings,
   }[tab]
   const isViewer = me?.role === 'viewer'
   const tabs = isViewer ? TABS.filter(([id]) => !ADMIN_TABS.has(id)) : TABS
@@ -194,7 +196,14 @@ export default function App() {
         <div className="tabs">
           {tabs.map(([id, name]) => (
             <button key={id} className={'tab' + (tab === id ? ' active' : '')}
-              onClick={() => openTab(id)}>{name}</button>
+              onClick={() => openTab(id)}>
+              {name}
+              {/* сколько вопросов ждёт ответа — иначе раздел надо открывать,
+                  чтобы узнать, есть ли там что-то */}
+              {id === 'questions' && summary?.questions_open > 0 && (
+                <span className="tab-count">{summary.questions_open}</span>
+              )}
+            </button>
           ))}
         </div>
         <div className="status">

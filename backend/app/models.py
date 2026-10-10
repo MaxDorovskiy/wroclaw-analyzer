@@ -163,6 +163,29 @@ class PriceHistory(Base):
     seen_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
+class OwnerQuestion(Base):
+    """Вопрос владельцу — раздел «Питання до мене» на сайте.
+
+    Номер сквозной по всей переписке: владелец может ответить «№12 — да»
+    в чате в любой момент или прямо здесь. Состояния: open — ждёт ответа;
+    answered — ответ есть, осталось сделать; deferred — отложено, не напоминать;
+    done — сделано. Идея и состояния — из CarIntel (решение владельца 27.09.2026)."""
+
+    __tablename__ = "owner_questions"
+
+    num = Column(Integer, primary_key=True)          # номер из чата, не автоинкремент
+    asked_at = Column(String)                        # ДД.ММ.ГГГГ — когда спросили
+    topic = Column(String)
+    text = Column(Text, nullable=False)
+    why = Column(Text)                               # почему это важно и что изменится
+    status = Column(String, default="open", index=True)
+    answer = Column(Text)
+    answered_at = Column(DateTime)
+    answered_via = Column(String)                    # чат | сайт
+    result = Column(Text)                            # что в итоге сделано
+    updated_at = Column(DateTime)
+
+
 class ScrapeRun(Base):
     __tablename__ = "scrape_runs"
     id = Column(Integer, primary_key=True)

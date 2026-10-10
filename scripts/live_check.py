@@ -37,6 +37,7 @@ PAGES = [
     ("stats", "table.grid tbody tr"),
     ("runs", "table.grid tbody tr"),
     ("journal", "table.grid tbody tr"),
+    ("questions", ".panel"),
     ("settings", ".form-grid input"),
 ]
 # Шум, который к нам не относится: расширения браузера, картинки площадок

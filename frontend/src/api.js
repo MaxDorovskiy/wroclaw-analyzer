@@ -87,6 +87,9 @@ export const api = {
   recompute: () => req('POST', '/api/recompute'),
   settings: () => req('GET', '/api/settings'),
   settingsSave: (body) => req('POST', '/api/settings', body),
+  questions: () => req('GET', '/api/questions'),
+  questionAnswer: (num, answer) => req('POST', `/api/questions/${num}/answer`, { answer }),
+  questionStatus: (num, status) => req('POST', `/api/questions/${num}/status`, { status }),
   jobs: () => req('GET', '/api/jobs'),
   exportUrl: (params, format) => BASE + '/api/export' + qs({ ...params, format }),
   // Картки контактів продавців/орендодавців: одна строка на продавца, с

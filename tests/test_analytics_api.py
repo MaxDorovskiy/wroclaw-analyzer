@@ -316,3 +316,47 @@ def test_price_drop_is_stored_and_sortable(clean_db):
     assert r.status_code == 200
     ids = [x["id"] for x in r.json()["items"]]
     assert ids == [dropped.id]                      # тот, у кого цена не менялась, в список не попал
+
+
+def test_owner_questions(clean_db, monkeypatch):
+    """Раздел «Питання до мене»: владелец отвечает на сайте, номера — те же,
+    что в чате (правило владельца 27.09.2026). Раздел его личный: роль
+    «перегляд» туда не ходит."""
+    from app import questions
+    from app.models import OwnerQuestion
+
+    db = clean_db
+    assert questions.seed(db) == len(questions.SEED)
+    assert questions.seed(db) == 0                 # повторный запуск ничего не трогает
+
+    client = TestClient(app)
+    r = client.get("/api/questions")
+    assert r.status_code == 200
+    body = r.json()
+    nums = [q["num"] for q in body["items"]]
+    assert nums[0] == 5 and body["open"] == 1      # ждущие — первыми, сделанное в конце
+    assert body["items"][-1]["status"] == "done"
+
+    # ответ с сайта
+    r = client.post("/api/questions/5/answer", json={"answer": "так, перезапускай"})
+    assert r.status_code == 200 and r.json()["status"] == "answered"
+    assert r.json()["answered_via"] == u"сайт"
+    assert client.get("/api/questions").json()["open"] == 0
+    assert client.get("/api/summary").json()["questions_open"] == 0
+
+    # пустой ответ не принимаем, несуществующий номер — 404
+    assert client.post("/api/questions/5/answer", json={"answer": "  "}).status_code == 400
+    assert client.post("/api/questions/999/answer", json={"answer": "да"}).status_code == 404
+
+    # отложить и вернуть
+    assert client.post("/api/questions/5/status", json={"status": "deferred"}).json()["status"] == "deferred"
+    assert client.post("/api/questions/5/status", json={"status": "open"}).json()["status"] == "open"
+    # сделанное обратно не открываем, выдуманный статус не принимаем
+    assert client.post("/api/questions/1/status", json={"status": "open"}).status_code == 400
+    assert client.post("/api/questions/5/status", json={"status": "bogus"}).status_code == 400
+
+    # новый вопрос берёт следующий свободный номер
+    num = questions.add(db, u"Тема", u"Питання?")
+    assert num == max(n for n, *_ in questions.SEED) + 1
+    questions.mark_done(db, num, u"зроблено")
+    assert db.get(OwnerQuestion, num).status == "done"
