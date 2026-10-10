@@ -68,6 +68,18 @@ $stopped = $false
 if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) {
     try {
         Stop-ScheduledTask -TaskName $task -ErrorAction Stop
+        # Stop-ScheduledTask гасит ТОЛЬКО server.ps1, а его дочерний uvicorn выживает
+        # и продолжает держать порт — сервер отвечал СТАРЫЙ, и выкатка не доезжала
+        # даже из окна администратора (10.10.2026, после перехода на вход S4U).
+        # Свой pid сервер сообщает сам в /api/health — по нему и гасим.
+        if ($before -and $before.pid) {
+            try {
+                Stop-Process -Id $before.pid -Force -ErrorAction Stop
+                Write-Host "uvicorn (pid $($before.pid)) остановлен"
+            } catch {
+                Write-Host "uvicorn (pid $($before.pid)) не остановлен: $($_.Exception.Message)" -ForegroundColor Yellow
+            }
+        }
         Start-Sleep -Seconds 3
         Start-ScheduledTask -TaskName $task -ErrorAction Stop
         Write-Host "задача $task перезапущена"
