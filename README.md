@@ -16,7 +16,7 @@
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m pytest tests -q                       # 33 теста на фикстурах
+.venv/bin/python -m pytest tests -q                       # 38 тестов на фикстурах
 .venv/bin/python scripts/demo_seed.py --db data/demo.db   # синтетика для интерфейса
 cd frontend && npm install && npm run build && cd ..
 WRO_DB=data/demo.db DISABLE_SCHEDULER=1 .venv/bin/uvicorn app.main:app --app-dir backend --port 8020
@@ -61,6 +61,9 @@ Chromium (`playwright install chromium`, его ставит `install.ps1`).
 | `scripts/reparse.py` | повторный разбор raw_json после правки парсера (и снятие того, что адаптер больше не берёт) |
 | `scripts/translate_backlog.py` | догнать очередь перевода |
 | `scripts/ui_check.py` | скриншоты интерфейса на фикстурах без сервера |
+| `scripts/live_check.py` | боевой сайт браузером: все разделы, ошибки в консоли, снимки |
+| `scripts/scrape_alive.py` | идёт ли прогон — по базе, когда сервер молчит |
+| `scripts/backfill_card_fields.py` | телефон и состояние из уже скачанных карточек |
 | `deploy/windows/` | установка, сервер, триггеры, безопасный перезапуск |
 
 ## Проверка правок
