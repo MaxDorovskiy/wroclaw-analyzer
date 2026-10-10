@@ -1169,8 +1169,9 @@ def _warm_summary():
     прочерками — именно так и выглядит «сервер не работает»."""
     db = SessionLocal()
     try:
-        _cache.pop("summary", None)
-        _cached("summary", lambda: _summary_heavy(db), 30)
+        # Считаем и только потом кладём поверх. Если сначала удалить старое,
+        # то запрос, попавший в эту щель, опять ждёт счёта — ради чего всё и затеялось.
+        _cache["summary"] = (datetime.utcnow(), _summary_heavy(db))
     except Exception as e:  # noqa: BLE001
         log.warning("подогрев сводки: %s", e)
     finally:

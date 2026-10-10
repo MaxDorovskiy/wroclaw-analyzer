@@ -105,7 +105,13 @@ if ($beforeMark -and "$($after.started_at)|$($after.pid)" -eq $beforeMark) {
     Write-Host "СЕРВЕР НЕ ПЕРЕЗАПУСТИЛСЯ: отвечает тот же процесс (pid $($after.pid)), выкатка НЕ доехала." -ForegroundColor Red
     $id = [Security.Principal.WindowsIdentity]::GetCurrent()
     if (-not (New-Object Security.Principal.WindowsPrincipal($id)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        Write-Host "Причина почти наверняка в правах: задача сервера работает от администратора. Запустите PowerShell от имени администратора и повторите." -ForegroundColor Yellow
+        # С 10.10.2026 задачи созданы с входом S4U и правами администратора —
+        # теперь их нельзя ни остановить, ни запустить из обычного PowerShell.
+        # Даём готовую команду, чтобы владельцу осталось одно нажатие.
+        Write-Host "Причина в правах: задача сервера работает от администратора (вход S4U)." -ForegroundColor Yellow
+        Write-Host "Скопируйте и выполните — откроется окно с запросом прав:" -ForegroundColor Yellow
+        Write-Host ("  Start-Process powershell -Verb RunAs -ArgumentList '-NoExit','-NoProfile','-ExecutionPolicy','Bypass','-File','" +
+                    (Join-Path $PSScriptRoot "safe_restart.ps1") + "'") -ForegroundColor Cyan
     }
     exit 1
 }
