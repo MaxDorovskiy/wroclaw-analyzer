@@ -435,7 +435,11 @@ table.dupes tr.self td { background: var(--accent-soft); }
   .topbar { padding: var(--s2) var(--s3); gap: var(--s2); }
   .topbar h1 { font-size: 14px; }
   .topbar .status { width: 100%; margin-left: 0; order: 3; gap: var(--s2); }
-  .tabs { order: 2; width: 100%; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 2px; }
+  /* min-width: 0 обязателен: без него флекс-элемент растягивается под
+     содержимое и overflow-x не срабатывает — на телефоне вся страница
+     ехала вбок на 33 пк (проверка 390×844, 10.10.2026) */
+  .tabs { order: 2; width: 100%; min-width: 0; max-width: 100%; overflow-x: auto;
+          flex-wrap: nowrap; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
   .tab { white-space: nowrap; }
   .tabs .sep { display: none; }
   .page { padding: var(--s3); }
@@ -452,6 +456,11 @@ table.dupes tr.self td { background: var(--accent-soft); }
   .kv { grid-template-columns: 1fr; }
   .cards { grid-template-columns: 1fr 1fr; }
   .card .value { font-size: 21px; }
+  /* Ряд «сортування: [поле] [поле]» не влезал в 390 пк и тянул всю
+     страницу вбок на 33 пк: горизонтальная прокрутка на телефоне всегда
+     выглядит поломкой (проверка 390×844, 10.10.2026) */
+  label.chk { flex-wrap: wrap; max-width: 100%; white-space: normal; }
+  label.chk select, label.chk input { max-width: 100%; min-width: 0; }
 }
 
 /* ссылка-действие внутри текста: выглядит ссылкой, но это кнопка — иначе с

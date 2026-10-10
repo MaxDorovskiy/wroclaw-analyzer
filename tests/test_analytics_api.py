@@ -360,3 +360,28 @@ def test_owner_questions(clean_db, monkeypatch):
     assert num == max(n for n, *_ in questions.SEED) + 1
     questions.mark_done(db, num, u"зроблено")
     assert db.get(OwnerQuestion, num).status == "done"
+
+
+def test_bad_url_params_are_400_not_500(clean_db):
+    """Мусор в адресе — это ошибка запроса, а не поломка сервера.
+
+    `?page=abc`, `?price_min=abc`, `?first_seen_days=nan` и номер длиной в
+    20 знаков валили ручку в 500 (проверка 10.10.2026): старая ссылка или
+    опечатка выглядели как «сайт сломался». nan отсекаем отдельно — float()
+    его принимает, а SQLite потом молча сравнивает с ним и всегда неверно."""
+    client = TestClient(app)
+    for q in ({"page": "abc"}, {"price_min": "abc"}, {"first_seen_days": "nan"},
+              {"per_page": "nan"}, {"area_max": "inf"}):
+        r = client.get("/api/listings", params=q)
+        assert r.status_code == 400, (q, r.status_code)
+        assert "detail" in r.json()
+    assert client.get("/api/listings/99999999999999999999").status_code == 404
+
+    # годные значения по-прежнему работают, в том числе отрицательные и пустые
+    for q in ({}, {"page": 1}, {"price_min": "500000"}, {"first_seen_days": "1"},
+              {"discount_min": "-5"}, {"price_min": ""}):
+        assert client.get("/api/listings", params=q).status_code == 200, q
+
+    # глубина тренда ограничена: иначе запрос считался минутами
+    r = client.get("/api/trends", params={"weeks": 99999})
+    assert r.status_code == 200

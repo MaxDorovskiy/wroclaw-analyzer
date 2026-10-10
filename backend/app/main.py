@@ -26,6 +26,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, or_, select, text
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from . import (analytics, dedup, fx, geo, i18n, presentation, questions, rent_analytics,
@@ -105,6 +106,9 @@ def _classify(method: str, path: str):
         return "presentation", None
     if path.startswith("/api/contacts"):
         return "contacts", None
+    # ответы владельца видны в Журнале как ответы, а не как «инше»
+    if path.startswith("/api/questions"):
+        return "question", None
     if method == "POST" and path.startswith("/api/") and not path.startswith(_NOISE):
         return "other", None
     return None
@@ -146,7 +150,12 @@ async def _basic_auth(request: Request, call_next):
     request.state.user = user
     response = await call_next(request)
     if request.url.path.startswith("/api/") and response.status_code < 400:
-        _write_access(user, request.method, request.url.path, str(request.url.query or ""))
+        # В ПОТОКЕ, а не здесь: это запись в SQLite внутри async-прослойки,
+        # то есть прямо в цикле событий. Пока долгий запрос держал базу, она
+        # ждала блокировки и с ней ждал весь сервер — не отвечал даже /api/health.
+        # Именно так один тяжёлый запрос ронял сайт для всех (10.10.2026).
+        await run_in_threadpool(_write_access, user, request.method, request.url.path,
+                                str(request.url.query or ""))
     return response
 
 
@@ -360,6 +369,25 @@ def full_dict(db: Session, l: Listing, user: str = "") -> Dict:
 
 
 # ---------- фильтры каталога ----------
+def _num(p: dict, key: str, default=None):
+    """Число из строки запроса. Мусор — понятная 400, а не 500.
+
+    Было: `?page=abc`, `?price_min=abc`, `?first_seen_days=nan` валили ручку
+    в 500 — старая ссылка или опечатка в адресе выглядели как поломка сервера.
+    nan и бесконечность отсекаем отдельно: float() их принимает, а SQLite потом
+    сравнивает с ними молча и неверно."""
+    v = p.get(key)
+    if v in (None, ""):
+        return default
+    try:
+        n = float(v)
+    except (TypeError, ValueError):
+        raise HTTPException(400, u"параметр %s: «%s» — не число" % (key, str(v)[:40]))
+    if n != n or n in (float("inf"), float("-inf")):
+        raise HTTPException(400, u"параметр %s: нечисловое значение" % key)
+    return n
+
+
 def _csv(v: Optional[str]) -> List[str]:
     return [x.strip() for x in (v or "").split(",") if x.strip()]
 
@@ -385,12 +413,12 @@ def _apply_filters(q, p: dict):
                      ("floor_min", Listing.floor), ("discount_min", Listing.discount_pct),
                      ("yield_min", Listing.yield_pct)):
         if p.get(key) not in (None, ""):
-            q = q.filter(col >= float(p[key]))
+            q = q.filter(col >= _num(p, key))
     for key, col in (("price_max", Listing.price_pln), ("area_max", Listing.area),
                      ("sqm_max", Listing.price_per_m2), ("build_year_max", Listing.build_year),
                      ("floor_max", Listing.floor)):
         if p.get(key) not in (None, ""):
-            q = q.filter(col <= float(p[key]))
+            q = q.filter(col <= _num(p, key))
     if _csv(p.get("district")):
         q = q.filter(Listing.district.in_(_csv(p["district"])))
     if _csv(p.get("osiedle")):
@@ -418,7 +446,8 @@ def _apply_filters(q, p: dict):
         else:
             q = q.filter(Listing.seller_id == sk)
     if p.get("first_seen_days") not in (None, ""):
-        q = q.filter(Listing.first_seen >= datetime.utcnow() - timedelta(days=float(p["first_seen_days"])))
+        days = max(0.0, min(3650.0, _num(p, "first_seen_days", 0.0)))
+        q = q.filter(Listing.first_seen >= datetime.utcnow() - timedelta(days=days))
     if str(p.get("dropped", "0")) == "1":
         # только те, у кого цена ДЕЙСТВИТЕЛЬНО упала: без этого список
         # «Знизили ціну» начинался с квартир, у которых цена не менялась (NULL впереди)
@@ -471,8 +500,8 @@ def api_listings(request: Request, db: Session = Depends(get_db)):
     sort = Favorite.at if key == "fav" else SORTS.get(key, Listing.first_seen)
     order = (p.get("order") or ("asc" if p.get("sort") in ("price", "price_sqm") else "desc")).lower()
     q = q.order_by(sort.asc().nullslast() if order == "asc" else sort.desc().nullslast(), Listing.id.desc())
-    page = max(1, int(p.get("page") or 1))
-    per_page = min(200, max(1, int(p.get("per_page") or 50)))
+    page = max(1, int(_num(p, "page", 1)))
+    per_page = min(200, max(1, int(_num(p, "per_page", 50))))
     rows = q.offset((page - 1) * per_page).limit(per_page).all()
     ph = _price_stats(db, [r.id for r in rows])
     favs = fav_ids(db, current_user(request), [r.id for r in rows])
@@ -481,9 +510,13 @@ def api_listings(request: Request, db: Session = Depends(get_db)):
             "items": [row_dict(r, ph.get(r.id), is_fav=r.id in favs) for r in rows]}
 
 
+# SQLite хранит целые в 8 байтах; `/api/listings/99999999999999999999` валил запрос в 500
+MAX_ID = 2 ** 63 - 1
+
+
 @app.get("/api/listings/{lid}")
 def api_listing(request: Request, lid: int, db: Session = Depends(get_db)):
-    l = db.get(Listing, lid)
+    l = db.get(Listing, lid) if abs(lid) <= MAX_ID else None
     if l is None:
         raise HTTPException(404, u"оголошення не знайдено")
     return full_dict(db, l, current_user(request))
@@ -817,12 +850,17 @@ def api_price_index(period: str = "month", offer_type: str = "sale", db: Session
 
 @app.get("/api/trends")
 def api_trends(weeks: int = 26, offer_type: str = "sale", db: Session = Depends(get_db)):
+    # без потолка `?weeks=99999` считался минутами и занимал рабочий поток;
+    # 260 недель — пять лет, дальше данных всё равно нет
+    weeks = max(1, min(260, weeks))
     return _cached("trends:%d:%s" % (weeks, offer_type), lambda: analytics.trends(db, weeks, offer_type))
 
 
 @app.get("/api/rent/yield_top")
 def api_yield_top(level: str = "osiedle", rooms: Optional[int] = None, min_rent: int = 8,
                   min_sale: int = 8, db: Session = Depends(get_db)):
+    # порог меньше единицы — это «берём и пустые пулы», считать там нечего
+    min_rent, min_sale = max(1, min_rent), max(1, min_sale)
     return _cached("yield:%s:%s:%d:%d" % (level, rooms, min_rent, min_sale),
                    lambda: rent_analytics.yield_top(db, level, rooms, min_rent, min_sale))
 
@@ -878,8 +916,8 @@ def _contacts(db: Session, p: dict) -> List[dict]:
 def api_contacts(request: Request, db: Session = Depends(get_db)):
     p = dict(request.query_params)
     rows = _contacts(db, p)
-    page = max(1, int(p.get("page") or 1))
-    per_page = min(500, max(1, int(p.get("per_page") or 50)))
+    page = max(1, int(_num(p, "page", 1)))
+    per_page = min(500, max(1, int(_num(p, "per_page", 50))))
     return {"total": len(rows), "page": page, "per_page": per_page,
             "items": rows[(page - 1) * per_page: page * per_page]}
 

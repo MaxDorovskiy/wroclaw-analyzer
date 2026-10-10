@@ -143,6 +143,7 @@ T.action = {
   export: 'експорт',
   contacts: 'контакти',
   presentation: 'презентація PDF',
+  question: 'відповідь на питання',
   other: 'інше',
 }
 

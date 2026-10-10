@@ -147,7 +147,9 @@ def yield_top(db: Session, level: str = "osiedle", rooms: Optional[int] = None,
             continue
         key = ("osiedle_rooms", (place, rk)) if level == "osiedle" else ("district_rooms", (place, rk))
         vals = pools.get(key, [])
-        if len(vals) < min_rent:
+        # И не пустой: при min_rent <= 0 проверка длины ничего не отсекала,
+        # и _median([]) возвращал None — ручка падала в 500 (проверка 10.10.2026)
+        if not vals or len(vals) < min_rent:
             continue
         med_area = _median(g["area"])
         rent_sqm = _median(vals) * coef_r[band(med_area)]
