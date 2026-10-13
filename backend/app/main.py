@@ -1194,9 +1194,15 @@ def _wal_checkpoint():
         return                      # во время прогона не мешаем писателю
     db = SessionLocal()
     try:
+        # Сначала PASSIVE: он НИКОГДА не блокируется и переносит в базу всё,
+        # до чего дотянется. TRUNCATE ждёт, пока уйдут читатели, а их на работающем
+        # сайте почти всегда кто-то есть: 13.10.2026 журнал днём дорос до 126 МБ
+        # (31 658 страниц), и с ним подтормозило чтение — сводка один раз ответила
+        # за 19 с. Два шага: сначала всегда полезный PASSIVE, потом попытка обрезать.
+        db.execute(text("PRAGMA wal_checkpoint(PASSIVE)"))
         busy, total, done = db.execute(text("PRAGMA wal_checkpoint(TRUNCATE)")).first()
-        if busy:
-            log.info("WAL: чекпойнт не вышел (есть читатели), страниц в журнале %s", total)
+        if busy and total > 20000:          # ~80 МБ и больше — стоит знать
+            log.info("WAL: обрезать не вышло (есть читатели), страниц в журнале %s, перенесено %s", total, done)
     except Exception as e:  # noqa: BLE001 — уборка не должна ронять сервер
         log.warning("WAL: %s", e)
     finally:
