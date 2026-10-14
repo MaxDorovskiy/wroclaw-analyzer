@@ -8,7 +8,7 @@
 from datetime import datetime
 
 from sqlalchemy import (Boolean, Column, DateTime, Float, Index, Integer,
-                        String, Text)
+                        String, Text, text)
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -136,10 +136,27 @@ class Listing(Base):
     is_favorite = Column(Boolean, default=False, index=True)
     note = Column(Text)
 
+    # ПОКРЫВАЮЩИЕ индексы для сводки — самая дорогая вещь в системе по чтению.
+    # Одна строка listings весит ~32 КБ (в ней raw_json и description_pl), то есть
+    # восемь страниц. Поиск по обычному индексу дочитывает строку целиком ради
+    # трёх чисел — 12 тыс. объявлений превращаются в ~400 МБ чтения. Реестр
+    # «Общие ресурсы» видел это как всплески 546 МБ/с каждые 25 с (13.10.2026).
+    # В покрывающий индекс сложены ВСЕ нужные колонки — таблица не читается вовсе.
     __table_args__ = (
         Index("ix_listings_source_sid", "source", "source_id", unique=True),
         Index("ix_listings_type_active", "offer_type", "is_active"),
         Index("ix_listings_osiedle_rooms", "osiedle", "rooms"),
+        # срез рынка: цена, площадь и дата по активным представителям
+        Index("ix_listings_summary", "offer_type", "is_active", "is_representative",
+              "price_pln", "area", "first_seen"),
+        Index("ix_listings_deals", "offer_type", "is_active", "is_representative", "discount_pct"),
+        Index("ix_listings_removed", "offer_type", "is_active", "removed_at"),
+        Index("ix_listings_sources", "is_active", "source", "last_seen"),
+        Index("ix_listings_title_uk", "is_active", "title_uk"),
+        # частичный: в нём только те, что ждут перевода описания, — тысячи
+        # строк вместо сотен тысяч, и обслуживать его почти бесплатно
+        Index("ix_listings_desc_pending", "is_active",
+              sqlite_where=text("description_uk IS NULL AND description_pl IS NOT NULL")),
     )
 
 

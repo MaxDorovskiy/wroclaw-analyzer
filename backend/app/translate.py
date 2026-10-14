@@ -364,10 +364,15 @@ def _done_today(db: Session) -> int:
 
 
 def pending_counts(db: Session) -> Dict[str, int]:
-    base = (Listing.is_active.is_(True), Listing.title_pl.isnot(None))
-    titles = db.execute(select(func.count()).select_from(Listing).where(*base, Listing.title_uk.is_(None))).scalar() or 0
+    """Без «title_pl IS NOT NULL»: у активных заголовок есть всегда (проверено
+    на боевой базе 14.10.2026 — 0 строк), а это лишнее условие ломало весь
+    смысл индекса: SQLite дочитывал каждую найденную строку (а она ~32 КБ)
+    только ради проверки этого поля."""
+    titles = db.execute(select(func.count()).select_from(Listing).where(
+        Listing.is_active.is_(True), Listing.title_uk.is_(None))).scalar() or 0
     descs = db.execute(select(func.count()).select_from(Listing).where(
-        *base, Listing.description_pl.isnot(None), Listing.description_uk.is_(None))).scalar() or 0
+        Listing.is_active.is_(True), Listing.description_pl.isnot(None),
+        Listing.description_uk.is_(None))).scalar() or 0
     done = db.execute(select(func.count()).select_from(Listing).where(Listing.title_uk.isnot(None))).scalar() or 0
     return {"pending_titles": titles, "pending_descriptions": descs, "done_total": done,
             "done_today": _done_today(db)}

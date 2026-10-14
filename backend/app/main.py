@@ -792,10 +792,14 @@ def _cached(key: str, build, ttl: int = 300, stale_ok: int = 0):
 
 
 def _summary_heavy(db: Session) -> Dict:
-    """Всё тяжёлое из сводки одним куском — чтобы кэшировать целиком."""
+    """Всё тяжёлое из сводки одним куском — чтобы кэшировать целиком.
+
+    Счётчики перевода — отдельно и на 10 минут: из всей сводки только они
+    ещё дочитывают строки целиком (проверка description_pl на пустоту), а очередь
+    перевода меняется медленно — минутная свежесть тут ничего не даёт."""
     return {
         "market": analytics.market_summary(db),
-        "translate": translate.status(db),
+        "translate": _cached("translate-status", lambda: translate.status(db), 600, stale_ok=1800),
         "sources": [{"source": s, "active": n, "last_seen": ls} for s, n, ls in db.execute(
             select(Listing.source, func.count(), func.max(Listing.last_seen))
             .where(Listing.is_active.is_(True)).group_by(Listing.source)).all()],
@@ -814,7 +818,7 @@ def api_summary(db: Session = Depends(get_db)):
     только признаки, ради которых шапка и опрашивается часто: идёт ли прогон
     и не стоит ли пауза. Они читаются из памяти и из одной строки настроек."""
     paused = scraper.paused_until(db)
-    heavy = _cached("summary", lambda: _summary_heavy(db), 30, stale_ok=600)
+    heavy = _cached("summary", lambda: _summary_heavy(db), 180, stale_ok=1800)
     return dict(heavy["market"], **{
         "last_runs": {"sale": _run_dict(scraper.last_run(db, "sale")),
                       "rent": _run_dict(scraper.last_run(db, "rent"))},
@@ -1362,7 +1366,10 @@ def _startup():
                                replace_existing=True)
     watchdog_scheduler.add_job(_wal_checkpoint, "interval", minutes=15, id="wal",
                                replace_existing=True)
-    watchdog_scheduler.add_job(_warm_summary, "interval", seconds=25, id="summary-warm",
+    # Раз в две минуты, а не в 25 секунд: сводка меняется три раза в сутки
+    # (после прогонов), а частый подогрев давал всплески чтения 546 МБ/с
+    # каждые 25 с — самая тяжёлая по чтению вещь на ПК (реестр, 13.10.2026).
+    watchdog_scheduler.add_job(_warm_summary, "interval", seconds=120, id="summary-warm",
                                replace_existing=True, next_run_time=datetime.now(KYIV))
     watchdog_scheduler.add_job(_translate_retry, "interval", minutes=60, id="translate-retry",
                                replace_existing=True)
