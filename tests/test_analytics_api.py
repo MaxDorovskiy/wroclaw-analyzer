@@ -385,3 +385,63 @@ def test_bad_url_params_are_400_not_500(clean_db):
     # глубина тренда ограничена: иначе запрос считался минутами
     r = client.get("/api/trends", params={"weeks": 99999})
     assert r.status_code == 200
+
+
+def test_room_rentals_are_not_in_rent_median():
+    """Комната на съём попадала в медиану аренды квартир: ставка за одну
+    комнату при площади всей квартиры (1000 zł за 62 м²). На узком уровне
+    (5-8 объявлений) одна такая строка сдвигала медиану. Признак — ТОЛЬКО
+    единственное число «pokój»: «2 pokoje do wynajęcia» — это двушка."""
+    from app.rent_analytics import is_room_rental as room
+    assert room(u"Pok\xf3j do wynajęcia")
+    assert room(u"Wynajmę pok\xf3j dla dziewczyny")
+    assert room(u"pok\xf3j w mieszkaniu w willi")
+    assert room(u"miejsce w pokoju dla studentki")
+    # целые квартиры
+    assert not room(u"Mieszkanie 3 pokoje na wynajem 61m")
+    assert not room(u"Wynajmę 3 pokoje (60m2), balkon")
+    assert not room(u"Kawalerka, pok\xf3j z aneksem")
+    assert not room(u"Wyjątkowe 2 Pokoje | Pok\xf3j Kąpielowy")
+    assert not room(u"1400 zł/pok\xf3j | 4 pokoje")
+    assert not room(u"1 pok\xf3j, 30 m2")
+
+
+def test_renovation_flats_compared_with_their_own_class(clean_db):
+    """Квартиру под ремонт сравнивали со смешанным пулом, где в основном уже
+    отремонтированные: она выглядела «на 15-30% дешевле рынка» ровно на
+    стоимость ремонта. 15.10.2026 из 208 «выгодных» квартир под ремонт 162
+    (78%) получили скидку именно так. Теперь сначала — такие же квартиры под
+    ремонт (хоть и на уровне места пошире), смешанный пул — последним."""
+    import json
+    from datetime import datetime
+
+    db = clean_db
+    now = datetime.utcnow()
+    rows = []
+    # в осиедле: 12 отремонтированных по 15 000 zł/м² и 2 под ремонт
+    for i in range(12):
+        rows.append(Listing(source="otodom", source_id="r%d" % i, offer_type="sale", url="https://x/r%d" % i,
+                            title_pl="M", rooms=2, area=50.0, price_pln=750000.0, condition="renovated",
+                            market="secondary", osiedle="Gaj", district="Krzyki",
+                            is_active=True, is_representative=True, first_seen=now, last_seen=now))
+    # в дзельнице: ещё 12 под ремонт по 11 000 zł/м² (это и есть честная база)
+    for i in range(12):
+        rows.append(Listing(source="otodom", source_id="t%d" % i, offer_type="sale", url="https://x/t%d" % i,
+                            title_pl="M", rooms=2, area=50.0, price_pln=550000.0, condition="to_renovate",
+                            market="secondary", osiedle="Huby", district="Krzyki",
+                            is_active=True, is_representative=True, first_seen=now, last_seen=now))
+    target = Listing(source="otodom", source_id="x", offer_type="sale", url="https://x/x", title_pl="M",
+                     rooms=2, area=50.0, price_pln=560000.0, condition="to_renovate", market="secondary",
+                     osiedle="Gaj", district="Krzyki", is_active=True, is_representative=True,
+                     first_seen=now, last_seen=now)
+    rows.append(target)
+    db.add_all(rows)
+    db.commit()
+
+    analytics.recompute_deal_scores(db)
+    db.refresh(target)
+    key = json.loads(target.baseline_key)
+    assert key[-1] == "to_renovate"                 # сравнили с такими же, а не со смешанным
+    # 560 тыс. против медианы 550 тыс. у квартир под ремонт — это НЕ выгода;
+    # против смешанного пула (в основном 750 тыс.) вышло бы «−25%»
+    assert target.discount_pct is not None and target.discount_pct < 5

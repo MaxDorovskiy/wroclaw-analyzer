@@ -9,6 +9,7 @@ Czynsz administracyjny не вычитаем — на аренде его обы
 """
 import json
 import logging
+import re
 from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
@@ -28,12 +29,39 @@ MIN_POOL = {"osiedle_rooms": 5, "osiedle": 8, "district_rooms": 8, "district": 1
 RENO_CONDITIONS = ("developer_bare", "to_renovate")
 
 
+# Сдаётся КОМНАТА, а не квартира. Такие объявления попадают в категорию
+# «мешкания — аренда» по ошибке продавца, и ставка в них — за одну комнату при
+# площади всей квартиры (1000 zł за 62 м²) или за комнату в 12 м² (1200 zł). На
+# узком уровне (осиедле × комнаты, 5-8 объявлений) одна такая строка сдвигает
+# медиану. На 15.10.2026 их 30 из 4124 активных.
+# Признак — ТОЛЬКО единственное число «pokój»: по-польски «2 pokoje do
+# wynajęcia» обычно значит «двушка в аренду», и фильтр по множественному числу
+# выкинул бы целые квартиры. Проверено глазами по всем совпадениям.
+_ROOM_RX = re.compile(r"(?<![\d\-])(?<!\d\s)\bpok[oó]j\b|\bmiejsce\s+w\s+pokoju\b", re.I)
+_WHOLE_FLAT_RX = re.compile(
+    r"kawalerk"                                  # студия — квартира из одной комнаты
+    r"|pok[oó]j\w*\s+k[aą]piel"                  # «pokój kąpielowy» — ванная
+    r"|\d\s*-?\s*pokoje\b|\d\s*pok\."            # «2 Pokoje», «3pok.» — описание целой квартиры
+    r"|mieszkanie\s+(lub\s+)?pok[oó]j"           # «mieszkanie pokój z kuchnią»
+    r"|z[lł]\s*/\s*pok", re.I)                   # «1400 zł/pokój» — цена в объявлении за всю
+
+
+def is_room_rental(title: Optional[str]) -> bool:
+    """Сдаётся комната, а не квартира целиком — в медиану аренды такое не берём."""
+    t = title or ""
+    return bool(_ROOM_RX.search(t)) and not _WHOLE_FLAT_RX.search(t)
+
+
 def _rent_rows(db: Session):
+    """Объявления аренды, из которых считается медиана ставки.
+
+    Только активные представители групп (одна квартира на Otodom и OLX считается
+    один раз), с правдоподобной ставкой за м² и без комнат на съём."""
     cols = (Listing.id, Listing.price_pln, Listing.area, Listing.rooms, Listing.district,
-            Listing.osiedle, Listing.osiedle_override, Listing.is_representative)
+            Listing.osiedle, Listing.osiedle_override, Listing.is_representative, Listing.title_pl)
     rows = db.execute(select(*cols).where(Listing.offer_type == "rent", Listing.is_active.is_(True),
                                           Listing.is_representative.is_(True))).all()
-    return [r for r in rows if _sane(r, "rent")]
+    return [r for r in rows if _sane(r, "rent") and not is_room_rental(r.title_pl)]
 
 
 def _rent_pools(rows):

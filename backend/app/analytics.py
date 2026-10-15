@@ -32,6 +32,9 @@ TRUST_MIN_POOL = 10          # меньше — «база тонкая»
 BAND_EDGES = (30, 45, 60, 80, 100)
 BASE_BAND = 2
 MIN_BAND_N = 30              # меньше — коэффициент полосы не меряем (1.0)
+# классы, у которых цена ниже рынка ИЗ-ЗА ремонта: смешивать их с отремонтированными
+# значит выдавать стоимость ремонта за скидку (см. recompute_deal_scores)
+RENO_BUCKETS = ("to_renovate", "developer_bare")
 
 
 def band(area: Optional[float]) -> Optional[int]:
@@ -121,7 +124,8 @@ def recompute_deal_scores(db: Session, explain_id: Optional[int] = None):
     """Скидка к медиане пула у всех активных объявлений продажи."""
     cols = (Listing.id, Listing.price_pln, Listing.area, Listing.rooms, Listing.market,
             Listing.condition, Listing.condition_override, Listing.district,
-            Listing.osiedle, Listing.osiedle_override, Listing.is_representative)
+            Listing.osiedle, Listing.osiedle_override, Listing.is_representative,
+            Listing.dedup_group)
     rows = db.execute(select(*cols).where(Listing.offer_type == "sale",
                                           Listing.is_active.is_(True))).all()
     sane = [r for r in rows if _sane(r, "sale")]
@@ -136,6 +140,7 @@ def recompute_deal_scores(db: Session, explain_id: Optional[int] = None):
     # 2) пулы: (уровень, ключ) -> [(скорректированная цена м², id)]
     pools: Dict[Tuple[str, tuple], List[Tuple[float, int]]] = defaultdict(list)
     info = {}
+    group_of: Dict[int, object] = {}
     for r in sane:
         adj = r.price_pln / r.area / coef[band(r.area)]
         rk = _rooms_key(r.rooms)
@@ -143,6 +148,7 @@ def recompute_deal_scores(db: Session, explain_id: Optional[int] = None):
         market = r.market or "any"
         bucket = _bucket(r)
         info[r.id] = (adj, rk, place_os, r.district, market, bucket)
+        group_of[r.id] = r.dedup_group or r.id
         if not r.is_representative:
             continue
         for mk in {market, "any"}:
@@ -164,21 +170,39 @@ def recompute_deal_scores(db: Session, explain_id: Optional[int] = None):
             upd["price_sqm_adj"] = round(adj, 2)
             steps = []
             found = None
-            # сначала свой рынок и свой класс, потом свой рынок и все классы,
-            # потом любой рынок — но уровень места держим узким, сколько можно
+            # Сначала свой рынок и свой класс, потом свой рынок и все классы,
+            # потом любой рынок — но уровень места держим узким, сколько можно.
             variants = [(market, bucket), (market, "mixed"), ("any", bucket), ("any", "mixed")]
             if bucket == "unknown":
                 variants = [(market, "mixed"), ("any", "mixed")]
-            for level, key in _pool_keys(r, rk, place_os, place_d, market, bucket):
-                for mk, bk in variants:
-                    k = key[:-2] + (mk, bk)
-                    vals = [(v, i) for v, i in pools.get((level, k), []) if i != r.id]
-                    n = len(vals)
-                    ok = n >= MIN_POOL[level]
-                    steps.append({"level": level, "key": k, "n": n, "ok": ok})
-                    if ok and found is None:
-                        med = _median([v for v, _ in vals])
-                        found = (level, k, n, med)
+            passes = [variants]
+            # Квартиру ПОД РЕМОНТ и бетон от застройщика сравниваем с ТАКИМИ ЖЕ,
+            # расширяя место, и лишь потом — со смешанным пулом. Иначе она
+            # сравнивается с уже отремонтированными соседями и выглядит на 15-30%
+            # «дешевле рынка» ровно на стоимость ремонта: на боевой базе 15.10.2026
+            # из 208 «выгодных» квартир под ремонт 162 (78%) получили скидку именно так.
+            # Для отремонтированных откат к смешанному пулу безопасен (они лишь
+            # выглядят дороже), а «освежить» — косметика, там место важнее класса.
+            if bucket in RENO_BUCKETS:
+                passes = [[(market, bucket), ("any", bucket)],
+                          [(market, "mixed"), ("any", "mixed")]]
+            for vs in passes:
+                for level, key in _pool_keys(r, rk, place_os, place_d, market, bucket):
+                    for mk, bk in vs:
+                        k = key[:-2] + (mk, bk)
+                        # без себя И без своих дублей: размещение не должно входить
+                        # в собственную базу через зеркало на другой площадке
+                        mine = group_of.get(r.id)
+                        vals = [(v, i) for v, i in pools.get((level, k), [])
+                                if i != r.id and group_of.get(i) != mine]
+                        n = len(vals)
+                        ok = n >= MIN_POOL[level]
+                        steps.append({"level": level, "key": k, "n": n, "ok": ok})
+                        if ok and found is None:
+                            med = _median([v for v, _ in vals])
+                            found = (level, k, n, med)
+                            break
+                    if found:
                         break
                 if found:
                     break

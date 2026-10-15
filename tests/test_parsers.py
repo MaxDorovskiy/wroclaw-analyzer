@@ -80,3 +80,27 @@ def test_otodom_private_seller_phone(fixtures):
     ad["contactDetails"] = {"name": "Maciej", "type": "private", "phones": ["+48889890447"]}
     d = normalize(Otodom().apply_ad(Otodom().parse_item(items[0], "sale"), ad))
     assert d["seller_type"] == "private" and d["seller_phone"] == "+48889890447"
+
+
+def test_condition_respects_negation():
+    """«Nie wymaga remontu» читалось как «требует ремонта»: регулярка находила
+    фразу и не смотрела, что перед ней «nie». 15.10.2026 так 50 из 784
+    квартир «под ремонт» (6,4%) на самом деле писали обратное, и им к
+    доходности приплюсовывалась отделка по 3860 zł/м²."""
+    from app.normalize import classify_condition as c
+    cases = [
+        (u"Mieszkanie nie wymaga remontu, gotowe do zamieszkania", "renovated"),
+        (u"Lokal nie wymaga generalnego remontu", "unknown"),
+        (u"To nie jest mieszkanie do remontu w typowym sensie", "unknown"),
+        (u"To nie jest standard deweloperski – to unikalny design", "unknown"),
+        # отрицание не перепрыгивает через запятую в соседнюю фразу
+        (u"Nie jest po remoncie, wymaga odświeżenia", "to_refresh"),
+        # \xabbez windy\xbb, \xabbez prowizji\xbb — \xabbez\xbb про лифт и комиссию, а не про ремонт
+        (u"3 piętro, bez windy   mieszkanie po remoncie 6 lat temu", "renovated"),
+        (u"Bez prowizji! Mieszkanie po remoncie", "renovated"),
+        # утвердительные — как и раньше
+        (u"Mieszkanie do remontu", "to_renovate"),
+        (u"Stan deweloperski, do wykończenia", "developer_bare"),
+    ]
+    for text, want in cases:
+        assert c(None, None, text, None)[0] == want, text

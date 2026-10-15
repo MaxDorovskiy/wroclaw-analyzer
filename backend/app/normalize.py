@@ -219,21 +219,45 @@ _RX_RENOVATED = re.compile(
     u"odnowione|odświeżone|po odświeżeniu", re.I)
 
 
+# Отрицание перед найденной фразой: «nie wymaga remontu», «to nie jest
+# mieszkanie do remontu», «bez żadnego remontu». Без этой проверки фраза
+# читалась как утверждение — 15.10.2026 так 50 из 784 квартир «под ремонт»
+# (6,4%) на самом деле писали, что ремонт НЕ нужен. Ошибка дорогая: такую
+# квартиру сравнивали с дешёвыми «под ремонт» (выгодной она не выглядела
+# никогда), а к её доходности приплюсовывали отделку по 3860 zł/м².
+# Окно — до трёх слов между отрицанием и фразой («nie jest mieszkanie do …»),
+# но НЕ через знак препинания: в «nie wymaga remontu, gotowe do zamieszkania»
+# «nie» относится к первой фразе, а вторая сказана утвердительно.
+# «bez» в списке НЕТ намеренно: «bez windy mieszkanie po remoncie», «bez
+# prowizji», «bez pośredników» — в объявлениях это сплошь и рядом, и «bez»
+# относится к лифту или комиссии, а не к ремонту. Настоящих отрицаний наших
+# фраз через «bez» на боевой базе не нашлось ни одного.
+_RX_NEGATION = re.compile(u"\\b(nie|żadn\\w*)\\b(\\s+[^\\s,.;:!?()\\-–—]+){0,3}\\s*$", re.I)
+
+
+def _says(rx, text: str) -> bool:
+    """Есть ли в тексте фраза из rx, сказанная УТВЕРДИТЕЛЬНО."""
+    for m in rx.finditer(text):
+        if not _RX_NEGATION.search(text[max(0, m.start() - 40):m.start()]):
+            return True
+    return False
+
+
 def classify_condition(construction_status: Optional[str], market: Optional[str],
                        title: str, description: Optional[str]):
     """-> (class, src). Структурная метка сильнее слов, но слова уточняют её."""
     text = u" ".join(x for x in (title or u"", description or u"") if x)
-    if _RX_TO_RENOVATE.search(text):
+    if _says(_RX_TO_RENOVATE, text):
         return "to_renovate", "text"
     if construction_status == "to_renovation":
         return "to_renovate", "status"
-    if _RX_DEVELOPER.search(text):
+    if _says(_RX_DEVELOPER, text):
         return "developer_bare", "text"
     if construction_status == "to_completion":
         return "developer_bare", "status"
-    if _RX_TO_REFRESH.search(text):
+    if _says(_RX_TO_REFRESH, text):
         return "to_refresh", "text"
-    if _RX_RENOVATED.search(text):
+    if _says(_RX_RENOVATED, text):
         return "renovated", "text"
     if construction_status == "ready_to_use":
         # у первички «do zamieszkania» обычно значит «с отделкой от застройщика»
