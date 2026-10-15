@@ -322,6 +322,35 @@ def _characteristics(l: Listing) -> List[dict]:
     return out
 
 
+_POOL_MARKET_UK = {"any": u"будь-який ринок", "primary": u"первинний ринок", "secondary": u"вторинний ринок"}
+_POOL_CLASS_UK = {"mixed": u"усі стани", "developer_bare": u"від забудовника", "to_renovate": u"під ремонт",
+                  "to_refresh": u"косметичне оновлення", "renovated": u"з ремонтом"}
+ERA_UK = {"<1945": u"будинки до 1945 р.", "1945-1999": u"будинки 1945–1999 рр.",
+          "2000-2014": u"будинки 2000–2014 рр.", "2015+": u"будинки від 2015 р."}
+
+
+def pool_key_uk(level: Optional[str], key) -> Optional[str]:
+    """Ключ пула словами: «Ołbin · 2 кімн. · вторинний ринок · під ремонт · будинки до 1945 р.».
+
+    Карточка показывала его массивом, и React склеивал элементы без пробелов:
+    «(Ołbin2secondaryto_renovate)» — проверено в превью 15.10.2026."""
+    parts_ = analytics.split_key(level, key)
+    if not parts_:
+        return None
+    head, market, cls, era = parts_
+    if level.startswith("osiedle"):
+        parts = [geo.osiedle_uk(head[0]) or head[0]]
+    elif level.startswith("district"):
+        parts = [geo.district_uk(head[0]) or head[0]]
+    else:
+        parts = [u"усе місто"]
+    if level.endswith("_rooms") and head:
+        parts.append(u"%s кімн." % (u"4+" if head[-1] == 4 else head[-1]))
+    parts += [_POOL_MARKET_UK.get(market, market), _POOL_CLASS_UK.get(cls, cls)]
+    parts.append(ERA_UK.get(era, u"будинки всіх років"))
+    return u" · ".join(u"%s" % p for p in parts)
+
+
 def full_dict(db: Session, l: Listing, user: str = "") -> Dict:
     d = row_dict(l, _price_stats(db, [l.id]).get(l.id), is_fav=l.id in fav_ids(db, user, [l.id]))
     d.update({
@@ -349,19 +378,29 @@ def full_dict(db: Session, l: Listing, user: str = "") -> Dict:
                    "seller_type": x.seller_type, "seller_type_uk": i18n.uk("seller_type", x.seller_type),
                    "seller_name": x.seller_name, "first_seen": x.first_seen, "is_active": x.is_active,
                    "rooms": x.rooms, "area": x.area, "floor": x.floor} for x in dupes]
-    coef = {}
+    coef, era_coef = {}, {}
     try:
-        coef = json.loads(get_settings(db).get("area_coef_sale") or "{}")
+        st = get_settings(db)
+        coef = json.loads(st.get("area_coef_sale") or "{}")
+        era_coef = json.loads(st.get("era_coef_sale") or "{}")
     except ValueError:
         pass
     band_lbl = analytics.band_label(analytics.band(l.area))
+    key = json.loads(l.baseline_key) if l.baseline_key else None
+    era = analytics.era(l)
     d["deal_explain"] = None if l.discount_pct is None else {
         "level": l.baseline_level, "level_uk": i18n.LEVELS.get(l.baseline_level or "", ("", ""))[1],
-        "key": json.loads(l.baseline_key) if l.baseline_key else None,
+        "key": key, "key_uk": pool_key_uk(l.baseline_level, key),
         "pool_size": l.baseline_count, "median_sqm": l.baseline_sqm,
         "price_sqm_adj": l.price_sqm_adj, "band": band_lbl, "area_coef": coef.get(band_lbl),
+        "era": era, "era_uk": ERA_UK.get(era), "era_coef": era_coef.get(era) if era else None,
         "thin": l.deal_thin_base, "discount_pct": l.discount_pct,
     }
+    # с кем сравнивали, если не со своим классом (analytics._bucket)
+    split = analytics.split_key(l.baseline_level, key)
+    if d["deal_explain"] and split and split[2] == "to_renovate" and (l.condition_override or l.condition) == "developer_bare":
+        d["deal_explain"]["note_uk"] = (u"«Do wykończenia» у будинку, що не є новобудовою, — це квартира під повне "
+                                        u"оздоблення, тож порівнюємо з квартирами під ремонт, а не з новобудовами")
     d["rent_explain"] = rent_analytics.rent_explain(db, l)
     if d["rent_explain"]:
         d["rent_explain"]["level_uk"] = i18n.LEVELS.get(l.rent_baseline_level or "", ("", ""))[1]
@@ -454,6 +493,13 @@ def _apply_filters(q, p: dict):
         q = q.filter(Listing.price_drop_pct < 0)
     if str(p.get("only_deals", "0")) == "1":
         q = q.filter(Listing.discount_pct >= p.get("_deal_threshold", 10.0))
+    # «База тонка» — сравнение с 6-9 соседями: карточка сама помечает такую
+    # скидку серым как ненадёжную, а пресеты «Вигідні» и счётчик на главной
+    # её считали (15.10.2026: 12% «выгодных», 6 из первых 20 в списке).
+    if p.get("thin_base") == "exclude":
+        q = q.filter(Listing.deal_thin_base.isnot(True))
+    elif p.get("thin_base") == "only":
+        q = q.filter(Listing.deal_thin_base.is_(True))
     if str(p.get("favorites", "0")) == "1":
         # обране того логина, который смотрит (админ может смотреть чужое — fav_user).
         # Именно join, а не подзапрос: он же даёт сортировку по дате добавления.
@@ -1394,8 +1440,22 @@ def _shutdown():
         scheduler.shutdown(wait=False)
 
 
+class _Frontend(StaticFiles):
+    """index.html — «no-cache» (браузер переспрашивает и получает 304 по ETag),
+    файлы сборки с хэшем в имени — на год. Без заголовка браузер кэширует
+    index.html сам (эвристика — десятая часть возраста файла) и после пересборки
+    часами показывает старый интерфейс: так было в превью 15.10.2026, исправленная
+    карточка появилась только с «?nocache» в адресе."""
+
+    async def get_response(self, path, scope):
+        resp = await super().get_response(path, scope)
+        resp.headers["Cache-Control"] = ("public, max-age=31536000, immutable"
+                                         if path.replace("\\", "/").startswith("assets/") else "no-cache")
+        return resp
+
+
 if FRONTEND_DIST.exists():
-    app.mount("/", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="frontend")
+    app.mount("/", _Frontend(directory=str(FRONTEND_DIST), html=True), name="frontend")
 else:
     @app.get("/")
     def _no_frontend():

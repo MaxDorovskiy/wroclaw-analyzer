@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import geo
-from .analytics import _median, _rooms_key, _sane, band, band_label, measure_area_coef
+from .analytics import _median, _rooms_key, _sane, band, band_label, era, era_ratios, measure_area_coef
 from .models import Listing
 from .settings_store import get_float, set_setting
 
@@ -58,20 +58,31 @@ def _rent_rows(db: Session):
     Только активные представители групп (одна квартира на Otodom и OLX считается
     один раз), с правдоподобной ставкой за м² и без комнат на съём."""
     cols = (Listing.id, Listing.price_pln, Listing.area, Listing.rooms, Listing.district,
-            Listing.osiedle, Listing.osiedle_override, Listing.is_representative, Listing.title_pl)
+            Listing.osiedle, Listing.osiedle_override, Listing.is_representative, Listing.title_pl,
+            Listing.build_year, Listing.building_type, Listing.market)
     rows = db.execute(select(*cols).where(Listing.offer_type == "rent", Listing.is_active.is_(True),
                                           Listing.is_representative.is_(True))).all()
     return [r for r in rows if _sane(r, "rent") and not is_room_rental(r.title_pl)]
 
 
-def _rent_pools(rows):
+def _rent_pools(rows, by_era: bool = True):
+    """Пулы ставок за м², приведённых к средней полосе площади и — если by_era —
+    к типичному для осиедле возрасту дома.
+
+    Поправка на возраст — та же, что у продажи (analytics.measure_era_coef), но
+    своя: в новостройке того же осиедле м² сдаётся на ~20% дороже, чем в старом
+    доме (копия 15.10.2026: 2015+ — 1,093 от медианы осиедле, 1945-2014 — 0,90).
+    Без неё старой дешёвой квартире ставили медианную ставку осиедле, и её
+    доходность выходила завышенной на ~10%."""
     by_band: Dict[int, List[float]] = defaultdict(list)
     for r in rows:
         by_band[band(r.area)].append(r.price_pln / r.area)
     coef = measure_area_coef(by_band)
+    era_coef = era_ratios((r.osiedle_override or r.osiedle, era(r), r.price_pln / r.area / coef[band(r.area)])
+                          for r in rows) if by_era else {}
     pools: Dict[Tuple[str, tuple], List[float]] = defaultdict(list)
     for r in rows:
-        adj = r.price_pln / r.area / coef[band(r.area)]
+        adj = r.price_pln / r.area / coef[band(r.area)] / era_coef.get(era(r), 1.0)
         rk = _rooms_key(r.rooms)
         os_ = r.osiedle_override or r.osiedle
         if os_ and rk:
@@ -85,7 +96,7 @@ def _rent_pools(rows):
         if rk:
             pools[("city_rooms", (rk,))].append(adj)
         pools[("city", ())].append(adj)
-    return pools, coef
+    return pools, coef, era_coef
 
 
 def _find(pools, rk, os_, district):
@@ -104,11 +115,14 @@ def recompute_yields(db: Session) -> Dict:
     rent = _rent_rows(db)
     if not rent:
         return {"rent": 0, "scored": 0}
-    pools, coef = _rent_pools(rent)
+    pools, coef, era_coef = _rent_pools(rent)
     set_setting(db, "area_coef_rent", json.dumps({band_label(b): round(c, 3) for b, c in coef.items()}, ensure_ascii=False))
+    set_setting(db, "era_coef_rent", json.dumps({e: round(c, 3) for e, c in sorted(era_coef.items())},
+                                                ensure_ascii=False))
     reno_sqm = get_float(db, "renovation_cost_sqm_pln", 2000.0)
     cols = (Listing.id, Listing.price_pln, Listing.area, Listing.rooms, Listing.district,
-            Listing.osiedle, Listing.osiedle_override, Listing.condition, Listing.condition_override)
+            Listing.osiedle, Listing.osiedle_override, Listing.condition, Listing.condition_override,
+            Listing.build_year, Listing.building_type, Listing.market)
     sale = db.execute(select(*cols).where(Listing.offer_type == "sale", Listing.is_active.is_(True))).all()
     updates = []
     scored = 0
@@ -125,7 +139,7 @@ def recompute_yields(db: Session) -> Dict:
             found = _find(pools, _rooms_key(r.rooms), r.osiedle_override or r.osiedle, r.district)
             if found:
                 level, n, med_sqm = found
-                expected = med_sqm * coef[band(r.area)] * r.area
+                expected = med_sqm * coef[band(r.area)] * era_coef.get(era(r), 1.0) * r.area
                 cond = r.condition_override or r.condition
                 reno = reno_sqm * r.area if cond in RENO_CONDITIONS else 0.0
                 invest = r.price_pln + reno
@@ -154,7 +168,8 @@ def yield_top(db: Session, level: str = "osiedle", rooms: Optional[int] = None,
     """Топ мест для покупки под сдачу: ставка zł/м² в месте против цены м² там же.
     Ставка приводится к площади пула продажи через коэффициент полосы."""
     rent = _rent_rows(db)
-    pools, coef_r = _rent_pools(rent)
+    # без поправки на возраст: здесь ставка места против цены места, обе — как есть
+    pools, coef_r, _ = _rent_pools(rent, by_era=False)
     cols = (Listing.price_pln, Listing.area, Listing.rooms, Listing.district, Listing.osiedle,
             Listing.osiedle_override)
     sale = [r for r in db.execute(select(*cols).where(

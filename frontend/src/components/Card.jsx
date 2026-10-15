@@ -79,6 +79,10 @@ function Chars({ rows }) {
   )
 }
 
+// Ключ пула словами с бэкенда (key_uk). Массив как есть React склеивал без
+// пробелов: «(Ołbin2secondaryto_renovate)»; запасной вариант — хотя бы через точку.
+const poolKey = (e) => e.key_uk || (e.key ? [].concat(e.key).join(' · ') : '')
+
 // Откуда взялась знижка: рівень пулу, його розмір, медіана та перебір кроків
 // тим самим кодом, що й розрахунок (backend analytics.explain).
 function DealExplain({ l }) {
@@ -93,12 +97,14 @@ function DealExplain({ l }) {
             {l.discount_pct >= 0 ? '−' : '+'}{fmtNum(Math.abs(l.discount_pct), 1)}%
           </span>
         )}
-        рівень <b>{tr('level', e.level)}</b>{e.key ? <span className="muted"> ({e.key})</span> : ''},
+        рівень <b>{tr('level', e.level)}</b>{poolKey(e) ? <span className="muted"> ({poolKey(e)})</span> : ''},
         пул <b>{fmtNum(e.pool_size)}</b>, медіана <b>{fmtNum(e.median_sqm)} zł/м²</b>
         {e.area_coef != null && <>, поправка на площу ×{fmtNum(e.area_coef, 3)}</>}
+        {e.era_coef != null && <>, на вік будинку ×{fmtNum(e.era_coef, 3)} ({e.era_uk})</>}
         {e.price_sqm_adj != null && <>, ціна з поправкою {fmtNum(e.price_sqm_adj)} zł/м²</>}
         {l.deal_thin_base ? <span className="badge warn" style={{ marginLeft: 8 }}>база тонка</span> : null}
       </p>
+      {e.note_uk && <p className="muted">{e.note_uk}</p>}
       {e.steps && e.steps.length > 0 && (
         <table>
           <thead><tr><th>рівень</th><th>ключ</th><th className="num">n</th><th></th></tr></thead>
@@ -106,7 +112,7 @@ function DealExplain({ l }) {
             {e.steps.map((s, i) => (
               <tr key={i} className={s.ok ? 'hit' : ''}>
                 <td>{tr('level', s.level)}</td>
-                <td className="muted">{s.key || ''}</td>
+                <td className="muted">{[].concat(s.key || []).join(' · ')}</td>
                 <td className="num">{fmtNum(s.n)}</td>
                 <td>{s.ok ? '✓ вистачило' : 'замало'}</td>
               </tr>

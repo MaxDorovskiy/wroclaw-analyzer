@@ -93,8 +93,87 @@ def _rooms_key(rooms: Optional[int]) -> Optional[int]:
     return min(rooms, 4)
 
 
+#: Эпохи дома по году постройки: каменицы, PRL и 90-е, 2000-е, новостройки.
+ERA_EDGES = ((1945, "<1945"), (2000, "1945-1999"), (2015, "2000-2014"))
+ERA_NEW = "2015+"
+#: Год неизвестен — эпоха по типу дома, где тип её однозначно задаёт (blok
+#: строили во все годы — по нему эпоху не угадать).
+ERA_BY_TYPE = {"tenement": "<1945", "apartment": ERA_NEW}
+MIN_ERA_CELL = 5          # квартир одной эпохи в осиедле, чтобы брать её медиану
+MIN_ERA_PLACE = 20        # квартир в осиедле, чтобы оно годилось для замера
+MIN_ERA_OSIEDLA = 5       # осиедле с замером, чтобы верить поправке эпохи
+
+
+def era(row) -> Optional[str]:
+    year = getattr(row, "build_year", None)
+    if year:
+        for edge, label in ERA_EDGES:
+            if year < edge:
+                return label
+        return ERA_NEW
+    if getattr(row, "market", None) == "primary":
+        return ERA_NEW          # первичка без года — дом ещё строится
+    return ERA_BY_TYPE.get(getattr(row, "building_type", None))
+
+
+def _new_build(row) -> bool:
+    """Новостройка: «do wykończenia» на вторичке в ней — перепродажа бетона от
+    застройщика, и сравнивать её надо с такими же."""
+    return era(row) == ERA_NEW
+
+
+def measure_era_coef(rows, area_coef: Dict[int, float]) -> Dict[str, float]:
+    """Поправка на возраст дома — как поправка на площадь: мерится на своих данных.
+
+    Без неё скидка во многом измеряла возраст: на копии 15.10.2026 «выгодными»
+    (≥15%) были 38% квартир вторички в домах до 1945 г. и 4% в новостройках, а
+    «дороже рынка на 15%+» — 9% и 44%. Мерим ВНУТРИ осиедле (иначе возраст
+    смешается с местом: каменицы в центре, новостройки на окраине) и только по
+    вторичке с ремонтом (иначе — с классом состояния): для эпохи берём медиану
+    отношений «медиана эпохи в осиедле / медиана всего осиедле». Тогда же
+    вышло: до 1945 — 0,889, 1945-1999 — 0,938, 2000-2014 — 0,996, 2015+ — 1,125.
+    Эпоха неизвестна — поправки нет (1,0 — уровень типичного дома осиедле)."""
+    return era_ratios((r.osiedle_override or r.osiedle, era(r), r.price_pln / r.area / area_coef[band(r.area)])
+                      for r in rows if r.is_representative and r.market == "secondary" and _bucket(r) == "renovated")
+
+
+def era_ratios(items) -> Dict[str, float]:
+    """(осиедле, эпоха, zł/м² после поправки на площадь) -> поправка эпохи.
+    Общая для продажи и аренды (rent_analytics)."""
+    by: Dict[str, Dict[Optional[str], List[float]]] = defaultdict(lambda: defaultdict(list))
+    for os_, e, v in items:
+        if os_:
+            by[os_][e].append(v)
+    ratios: Dict[str, List[float]] = defaultdict(list)
+    for cells in by.values():
+        everything = [v for vs in cells.values() for v in vs]
+        if len(everything) < MIN_ERA_PLACE:
+            continue
+        m = _median(everything)
+        for e, vs in cells.items():
+            if e and len(vs) >= MIN_ERA_CELL:
+                ratios[e].append(_median(vs) / m)
+    return {e: max(0.7, min(1.3, _median(v))) for e, v in ratios.items() if len(v) >= MIN_ERA_OSIEDLA}
+
+
 def _bucket(row) -> str:
+    """Класс состояния, с которым квартиру сравнивают по цене.
+
+    «Do wykończenia» на вторичке в доме НЕ новостройке — не бетон от
+    застройщика, а квартира под полный ремонт, и стоит она рядом с «под ремонт»
+    того же возраста, а не с новостройками. Медианы zł/м² вторички на копии
+    15.10.2026 («от застройщика» / «под ремонт»): до 1950 г. 10 606 / 9 693,
+    1950-1999 — 11 387 / 10 789, 2000-2014 — 12 637 / 12 232; у новостроек
+    «от застройщика» — 13 864-14 032, и пул этого класса на 94% из них. Сравнение
+    с ним давало таким квартирам «скидку» 20-46% (каменица на Ołbinie «do
+    własnego wykończenia» — 26,6%). Да и сам признак там — поле, которое
+    выбрал продавец: из 13 таких квартир 2000-2014 гг., прочитанных глазами,
+    голый бетон текст подтверждает у двух, а у двух прямо опровергает
+    («wymaga odświeżenia», «wykończenie premium»). Показанное состояние не
+    меняется: это только пул сравнения, и карточка пишет, с кем сравнивали."""
     c = row.condition_override or row.condition or "unknown"
+    if c == "developer_bare" and getattr(row, "market", None) == "secondary" and not _new_build(row):
+        return "to_renovate"
     return c
 
 
@@ -102,6 +181,24 @@ def _sane(row, offer_type: str) -> bool:
     lo, hi = SANE_SQM_SALE if offer_type == "sale" else SANE_SQM_RENT
     return bool(row.price_pln and row.area and row.area >= MIN_AREA
                 and lo <= row.price_pln / row.area <= hi)
+
+
+#: сколько элементов места в ключе пула на каждом уровне
+_PLACE_PARTS = {"osiedle_rooms": 2, "osiedle": 1, "district_rooms": 2, "district": 1, "city_rooms": 1, "city": 0}
+
+
+def split_key(level: Optional[str], key) -> Optional[Tuple[list, str, str, str]]:
+    """Ключ пула -> (место, рынок, класс, эпоха). Ключи без эпохи (до
+    15.10.2026) читаются тоже — с эпохой «any»: они лежат в базе до пересчёта."""
+    if not level or not key or level not in _PLACE_PARTS:
+        return None
+    key = list(key)
+    n = _PLACE_PARTS[level]
+    if len(key) == n + 3:
+        return key[:n], key[n], key[n + 1], key[n + 2]
+    if len(key) == n + 2:
+        return key[:n], key[n], key[n + 1], "any"
+    return None
 
 
 def _pool_keys(row, rk, place_os, place_d, market, bucket) -> List[Tuple[str, tuple]]:
@@ -125,7 +222,7 @@ def recompute_deal_scores(db: Session, explain_id: Optional[int] = None):
     cols = (Listing.id, Listing.price_pln, Listing.area, Listing.rooms, Listing.market,
             Listing.condition, Listing.condition_override, Listing.district,
             Listing.osiedle, Listing.osiedle_override, Listing.is_representative,
-            Listing.dedup_group)
+            Listing.dedup_group, Listing.build_year, Listing.building_type)
     rows = db.execute(select(*cols).where(Listing.offer_type == "sale",
                                           Listing.is_active.is_(True))).all()
     sane = [r for r in rows if _sane(r, "sale")]
@@ -136,25 +233,31 @@ def recompute_deal_scores(db: Session, explain_id: Optional[int] = None):
             by_band[band(r.area)].append(r.price_pln / r.area)
     coef = measure_area_coef(by_band)
     set_setting(db, "area_coef_sale", json.dumps({band_label(b): round(c, 3) for b, c in coef.items()}, ensure_ascii=False))
+    # 1б) поправка на возраст дома — после площади (см. measure_era_coef)
+    era_coef = measure_era_coef(sane, coef)
+    set_setting(db, "era_coef_sale", json.dumps({e: round(c, 3) for e, c in sorted(era_coef.items())},
+                                                ensure_ascii=False))
 
     # 2) пулы: (уровень, ключ) -> [(скорректированная цена м², id)]
     pools: Dict[Tuple[str, tuple], List[Tuple[float, int]]] = defaultdict(list)
     info = {}
     group_of: Dict[int, object] = {}
     for r in sane:
-        adj = r.price_pln / r.area / coef[band(r.area)]
+        e = era(r)
+        adj = r.price_pln / r.area / coef[band(r.area)] / era_coef.get(e, 1.0)
         rk = _rooms_key(r.rooms)
         place_os = r.osiedle_override or r.osiedle
         market = r.market or "any"
         bucket = _bucket(r)
-        info[r.id] = (adj, rk, place_os, r.district, market, bucket)
+        info[r.id] = (adj, rk, place_os, r.district, market, bucket, e)
         group_of[r.id] = r.dedup_group or r.id
         if not r.is_representative:
             continue
         for mk in {market, "any"}:
             for bk in ({bucket, "mixed"} if bucket != "unknown" else {"mixed"}):
-                for level, key in _pool_keys(r, rk, place_os, r.district, mk, bk):
-                    pools[(level, key)].append((adj, r.id))
+                for ek in ({e, "any"} if e else {"any"}):
+                    for level, key in _pool_keys(r, rk, place_os, r.district, mk, bk):
+                        pools[(level, key + (ek,))].append((adj, r.id))
 
     # 3) каждому — первая база, где хватает соседей
     updates = []
@@ -166,7 +269,7 @@ def recompute_deal_scores(db: Session, explain_id: Optional[int] = None):
                "baseline_key": None, "baseline_count": None, "deal_thin_base": None,
                "price_sqm_adj": None, "deal_updated_at": now}
         if r.id in info:
-            adj, rk, place_os, place_d, market, bucket = info[r.id]
+            adj, rk, place_os, place_d, market, bucket, e = info[r.id]
             upd["price_sqm_adj"] = round(adj, 2)
             steps = []
             found = None
@@ -186,21 +289,31 @@ def recompute_deal_scores(db: Session, explain_id: Optional[int] = None):
             if bucket in RENO_BUCKETS:
                 passes = [[(market, bucket), ("any", bucket)],
                           [(market, "mixed"), ("any", "mixed")]]
+            # Внутри варианта — сначала дома той же эпохи, но только если их не
+            # меньше TRUST_MIN_POOL: иначе база тонкая, и лучше все эпохи с
+            # поправкой на возраст. На копии 15.10.2026 «выгодных» (≥15%) среди
+            # домов до 1945 г. стало 18% против 23% с одной поправкой и 38% без
+            # неё; «дороже рынка на 15%+» у новостроек — 24% / 27% / 44%. Тонких
+            # баз столько же (690); своя эпоха — у 67% квартир. Без порога в 10
+            # выходило чуть ровнее, но тонких баз — 1242.
+            eras = [(e, TRUST_MIN_POOL)] if e else []
+            mine = group_of.get(r.id)
             for vs in passes:
                 for level, key in _pool_keys(r, rk, place_os, place_d, market, bucket):
                     for mk, bk in vs:
-                        k = key[:-2] + (mk, bk)
-                        # без себя И без своих дублей: размещение не должно входить
-                        # в собственную базу через зеркало на другой площадке
-                        mine = group_of.get(r.id)
-                        vals = [(v, i) for v, i in pools.get((level, k), [])
-                                if i != r.id and group_of.get(i) != mine]
-                        n = len(vals)
-                        ok = n >= MIN_POOL[level]
-                        steps.append({"level": level, "key": k, "n": n, "ok": ok})
-                        if ok and found is None:
-                            med = _median([v for v, _ in vals])
-                            found = (level, k, n, med)
+                        for ek, need in eras + [("any", 0)]:
+                            k = key[:-2] + (mk, bk, ek)
+                            # без себя И без своих дублей: размещение не должно входить
+                            # в собственную базу через зеркало на другой площадке
+                            vals = [(v, i) for v, i in pools.get((level, k), [])
+                                    if i != r.id and group_of.get(i) != mine]
+                            n = len(vals)
+                            ok = n >= max(MIN_POOL[level], need)
+                            steps.append({"level": level, "key": k, "n": n, "ok": ok})
+                            if ok:
+                                found = (level, k, n, _median([v for v, _ in vals]))
+                                break
+                        if found:
                             break
                     if found:
                         break
@@ -214,8 +327,8 @@ def recompute_deal_scores(db: Session, explain_id: Optional[int] = None):
                 scored += 1
             if explain_id == r.id:
                 trace = {"adj": adj, "band": band_label(band(r.area)), "coef": coef[band(r.area)],
-                         "steps": steps, "found": found and {"level": found[0], "key": found[1],
-                                                             "n": found[2], "median": found[3]}}
+                         "era": e, "era_coef": era_coef.get(e, 1.0), "steps": steps,
+                         "found": found and {"level": found[0], "key": found[1], "n": found[2], "median": found[3]}}
         updates.append(upd)
     for i in range(0, len(updates), 2000):
         db.bulk_update_mappings(Listing, updates[i:i + 2000])
@@ -292,10 +405,11 @@ def market_summary(db: Session) -> Dict:
             # Главный экран показывал «Вигідних зараз: —» с первого дня:
             # число просто никто не считал. Порог — тот же, по которому
             # работает фильтр only_deals (настройка deal_threshold_pct).
+            # Тонкую базу не считаем: карточка сама называет такую скидку ненадёжной.
             thr = get_float(db, "deal_threshold_pct", 10.0)
             block["deals_count"] = db.execute(select(func.count()).select_from(Listing).where(
                 Listing.offer_type == "sale", Listing.is_active.is_(True),
-                Listing.is_representative.is_(True),
+                Listing.is_representative.is_(True), Listing.deal_thin_base.isnot(True),
                 Listing.discount_pct >= thr)).scalar() or 0
             block["deals_threshold_pct"] = thr
         if offer_type == "rent":

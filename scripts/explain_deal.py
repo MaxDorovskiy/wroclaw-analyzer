@@ -32,7 +32,8 @@ def main():
     if not ex:
         print(u"объявление не прошло санитарные пороги (цена/площадь) — без оценки")
         return
-    print(u"цена м² с поправкой на площадь: %.0f (полоса %s, коэф. %.3f)" % (ex["adj"], ex["band"], ex["coef"]))
+    print(u"цена м² с поправками: %.0f (площадь: полоса %s, коэф. %.3f; возраст дома: %s, коэф. %.3f)" % (
+        ex["adj"], ex["band"], ex["coef"], ex.get("era") or u"неизвестен", ex.get("era_coef", 1.0)))
     for s in ex["steps"]:
         print(u"  %-15s n=%-4d %s  %s" % (s["level"], s["n"], u"OK" if s["ok"] else u"мало",
                                           json.dumps(s["key"], ensure_ascii=False)))

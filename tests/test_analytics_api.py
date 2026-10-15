@@ -440,8 +440,80 @@ def test_renovation_flats_compared_with_their_own_class(clean_db):
 
     analytics.recompute_deal_scores(db)
     db.refresh(target)
-    key = json.loads(target.baseline_key)
-    assert key[-1] == "to_renovate"                 # сравнили с такими же, а не со смешанным
+    key = analytics.split_key(target.baseline_level, json.loads(target.baseline_key))
+    assert key[2] == "to_renovate"                  # сравнили с такими же, а не со смешанным
     # 560 тыс. против медианы 550 тыс. у квартир под ремонт — это НЕ выгода;
     # против смешанного пула (в основном 750 тыс.) вышло бы «−25%»
     assert target.discount_pct is not None and target.discount_pct < 5
+
+
+def test_old_stock_bare_compared_with_renovation_not_new_builds(clean_db):
+    """«Do wykończenia» на вторичке в старом доме сравнивали с бетоном от
+    застройщика — а этот пул почти весь из новостроек (13 864 zł/м² против
+    10 606 у такой же квартиры до 1950 г.). Каменица «do własnego wykończenia»
+    получала «скидку» 26,6%. Теперь старый фонд сравнивается с «под ремонт»,
+    а перепродажа бетона в новостройке — по-прежнему с бетоном."""
+    import json
+    from datetime import datetime
+
+    db = clean_db
+    now = datetime.utcnow()
+
+    def flat(sid, price, cond, market, year, osiedle="Ołbin"):
+        return Listing(source="otodom", source_id=sid, offer_type="sale", url="https://x/" + sid, title_pl="M",
+                       rooms=2, area=50.0, price_pln=price, condition=cond, market=market, build_year=year,
+                       osiedle=osiedle, district="Śródmieście", is_active=True, is_representative=True,
+                       first_seen=now, last_seen=now)
+
+    rows = [flat("n%d" % i, 700000.0, "developer_bare", "primary", 2025) for i in range(12)]   # 14 000 zł/м²
+    rows += [flat("t%d" % i, 500000.0, "to_renovate", "secondary", 1930) for i in range(12)]   # 10 000 zł/м²
+    old = flat("old", 520000.0, "developer_bare", "secondary", 1930)
+    new = flat("new", 690000.0, "developer_bare", "secondary", 2022)
+    db.add_all(rows + [old, new])
+    db.commit()
+
+    analytics.recompute_deal_scores(db)
+    db.refresh(old)
+    db.refresh(new)
+    assert analytics.split_key(old.baseline_level, json.loads(old.baseline_key))[2] == "to_renovate"
+    assert old.discount_pct < 5                      # против новостроек было бы «−25,7%»
+    assert old.condition == "developer_bare"         # показанное состояние не трогаем
+    assert analytics.split_key(new.baseline_level, json.loads(new.baseline_key))[2] == "developer_bare"
+
+
+def test_old_house_not_a_deal_just_for_its_age(clean_db):
+    """Скидка во многом измеряла возраст дома: «выгодными» (≥15%) были 38%
+    квартир вторички в домах до 1945 г. и 4% в новостройках (копия
+    15.10.2026). Теперь — сначала дома той же эпохи (если их ≥10), а пул всех
+    эпох — с поправкой на возраст."""
+    import json
+    from datetime import datetime
+
+    db = clean_db
+    now = datetime.utcnow()
+
+    def flat(sid, price, year):
+        return Listing(source="otodom", source_id=sid, offer_type="sale", url="https://x/" + sid, title_pl="M",
+                       rooms=2, area=50.0, price_pln=price, condition="renovated", market="secondary",
+                       build_year=year, osiedle="Ołbin", district="Śródmieście", is_active=True,
+                       is_representative=True, first_seen=now, last_seen=now)
+
+    rows = [flat("o%d" % i, 500000.0, 1905) for i in range(12)]      # каменицы: 10 000 zł/м²
+    rows += [flat("n%d" % i, 700000.0, 2021) for i in range(12)]     # новостройки: 14 000 zł/м²
+    target = flat("x", 500000.0, 1910)
+    db.add_all(rows + [target])
+    db.commit()
+
+    analytics.recompute_deal_scores(db)
+    db.refresh(target)
+    key = analytics.split_key(target.baseline_level, json.loads(target.baseline_key))
+    assert key[3] == "<1945"                          # сравнили с такими же старыми домами
+    assert abs(target.discount_pct) < 5               # против смеси с новостройками было бы «−16,7%»
+
+
+def test_split_key_reads_old_and_new_format():
+    assert analytics.split_key("osiedle_rooms", ["Ołbin", 2, "secondary", "renovated", "<1945"]) == \
+        (["Ołbin", 2], "secondary", "renovated", "<1945")
+    # ключи без эпохи лежат в базе до первого пересчёта новым кодом
+    assert analytics.split_key("city", ["any", "mixed"]) == ([], "any", "mixed", "any")
+    assert analytics.split_key("district", ["Krzyki"]) is None

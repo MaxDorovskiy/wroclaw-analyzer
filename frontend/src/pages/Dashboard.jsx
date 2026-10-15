@@ -78,7 +78,7 @@ export default function Dashboard({ summary, onOpen, goTo, me }) {
     Promise.all([
       // новые за сутки: у Юлии — просто новая аренда, у владельца — новое и дешевле рынка
       get(isViewer ? { first_seen_days: 1, sort: 'first_seen', order: 'desc' }
-        : { first_seen_days: 1, only_deals: 1, sort: 'discount', order: 'desc' }),
+        : { first_seen_days: 1, only_deals: 1, thin_base: 'exclude', sort: 'discount', order: 'desc' }),
       get({ dropped: 1, sort: 'price_drop', order: 'asc' }),
       isViewer ? Promise.resolve([]) : get({ yield_min: 6, sort: 'yield', order: 'desc' }),
     ]).then(([fresh, drops, yields]) => {
@@ -120,7 +120,7 @@ export default function Dashboard({ summary, onOpen, goTo, me }) {
           onClick={() => goTo('rent', {})} title="Перейти до оренди" />
         {!isViewer && (
           <Kpi loading={waiting} label="Вигідних зараз" value={fmtNum(sale.deals_count)}
-            sub={`знижка ≥ ${fmtNum(sale.deals_threshold_pct ?? 10)}% до медіани`}
+            sub={`знижка ≥ ${fmtNum(sale.deals_threshold_pct ?? 10)}% до медіани, база ≥ 10 схожих`}
             onClick={() => goTo('deals', { preset: 'd10' })} title="Оголошення дешевші за схожі" />
         )}
         <Kpi loading={waiting} label="Знято за тиждень" value={fmtNum(sale.removed_7d)}
