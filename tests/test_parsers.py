@@ -75,11 +75,11 @@ def test_otodom_private_seller_phone(fixtures):
     ad = json.loads((fixtures / "otodom_ad.json").read_text(encoding="utf-8"))["props"]["pageProps"]["ad"]
     ad = dict(ad)
     ad.pop("agency", None)
-    ad["owner"] = {"id": 5, "name": "Maciej", "type": "PRIVATE", "phones": [],
-                   "contacts": [{"name": "Maciej", "phone": "+48889890447", "hasPhoneNumber": True}]}
-    ad["contactDetails"] = {"name": "Maciej", "type": "private", "phones": ["+48889890447"]}
+    ad["owner"] = {"id": 5, "name": "Jan", "type": "PRIVATE", "phones": [],
+                   "contacts": [{"name": "Jan", "phone": "+48600100299", "hasPhoneNumber": True}]}
+    ad["contactDetails"] = {"name": "Jan", "type": "private", "phones": ["+48600100299"]}
     d = normalize(Otodom().apply_ad(Otodom().parse_item(items[0], "sale"), ad))
-    assert d["seller_type"] == "private" and d["seller_phone"] == "+48889890447"
+    assert d["seller_type"] == "private" and d["seller_phone"] == "+48600100299"
 
 
 def test_condition_respects_negation():
