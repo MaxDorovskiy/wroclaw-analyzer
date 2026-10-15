@@ -21,7 +21,7 @@
       "runtimeExecutable": "powershell.exe",
       "runtimeArgs": ["-NoProfile", "-Command", ".\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000"],
       "port": 8000,
-      "env": { "DISABLE_SCHEDULER": "1", "WRO_DB": "data/wro-copy.db" }
+      "env": { "DISABLE_SCHEDULER": "1", "WRO_DB": "C:/wro-data/wro-copy.db", "GPU_REGISTRY": "off", "WRO_WEB_PASS": "" }
     },
     {
       "name": "frontend-dev",

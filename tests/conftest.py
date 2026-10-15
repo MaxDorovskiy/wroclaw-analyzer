@@ -3,6 +3,7 @@
 потому что config.py читает окружение при импорте."""
 import os
 import pathlib
+import shutil
 import sys
 import tempfile
 
@@ -30,6 +31,19 @@ FIX = ROOT / "tests" / "fixtures"
 @pytest.fixture(scope="session", autouse=True)
 def _schema():
     ensure_columns()
+    yield
+    # Каждый прогон оставлял в %TEMP% папку с базой по 7 МБ: к 15.10.2026 их
+    # набралось 96 (224 МБ). Базу и server.log (его держит открытым журнал
+    # main.py) сначала закрываем — иначе Windows не даст удалить файлы.
+    import logging
+    from app.db import engine
+    engine.dispose()
+    root = logging.getLogger()
+    for h in list(root.handlers):
+        if str(getattr(h, "baseFilename", "")).startswith(str(TMP)):
+            root.removeHandler(h)
+            h.close()
+    shutil.rmtree(str(TMP), ignore_errors=True)
 
 
 @pytest.fixture
