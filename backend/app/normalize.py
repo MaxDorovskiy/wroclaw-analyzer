@@ -387,6 +387,7 @@ def normalize(raw: RawListing) -> Dict[str, Any]:
     d["_unknown_places"] = unknown
     d["street"] = (raw.street or None)
     d["lat"], d["lon"] = raw.lat, raw.lon
+    d["geo_radius_km"] = raw.geo_radius_km
     d["address_raw"] = raw.address_raw
     d["location_raw"] = u" | ".join(x for x in raw.location_names if x) or None
 

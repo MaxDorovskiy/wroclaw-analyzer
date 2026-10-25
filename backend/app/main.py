@@ -232,7 +232,7 @@ def row_dict(l: Listing, ph: Optional[dict] = None, is_fav: bool = False) -> Dic
         "district": district, "district_uk": geo.district_uk(district),
         "osiedle": osiedle, "osiedle_uk": geo.osiedle_uk(osiedle),
         "osiedle_src": "manual" if l.osiedle_override else (l.osiedle_src or "source"),
-        "street": l.street, "lat": l.lat, "lon": l.lon,
+        "street": l.street, "lat": l.lat, "lon": l.lon, "geo_radius_km": l.geo_radius_km,
         "seller_type": l.seller_type, "seller_type_uk": i18n.uk("seller_type", l.seller_type),
         "seller_name": l.seller_name, "seller_phone": l.seller_phone, "seller_id": l.seller_id,
         "seller_key": seller_key(l), "no_commission": l.no_commission,

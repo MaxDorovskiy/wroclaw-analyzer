@@ -76,6 +76,10 @@ class Listing(Base):
     street = Column(String)
     lat = Column(Float)
     lon = Column(Float)
+    # Точность координат, км: 0 — точка дома; больше — площадка показывает лишь
+    # «где-то здесь» (OLX без точного адреса: центр дзельницы, радиус 8 км).
+    # NULL — источник не сообщает (Otodom). По неточной точке осиедле не угадываем.
+    geo_radius_km = Column(Integer)
     address_raw = Column(String)
     location_raw = Column(String)            # все имена мест от источника, через « | »
 

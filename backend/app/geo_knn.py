@@ -15,13 +15,15 @@ Otodom называет осиедле у 100% своих объявлений �
 
 Проверено на 3000 отложенных точках Otodom (leave-one-out): см. scripts/fill_osiedle.py.
 """
+import json
 import logging
 import math
 from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from . import geo
 from .models import Listing
 
 log = logging.getLogger("geo_knn")
@@ -88,40 +90,110 @@ def build_map(db: Session, exclude_ids: Optional[set] = None) -> OsiedleMap:
     """Карта из объявлений, где источник САМ назвал осиедле (это Otodom).
     Свои же догадки в карту не попадают — иначе ошибка расползлась бы."""
     rows = db.execute(select(Listing.id, Listing.lat, Listing.lon, Listing.osiedle).where(
-        Listing.lat.isnot(None), Listing.lon.isnot(None),
+        Listing.lat.isnot(None), Listing.lon.isnot(None), _precise(),
         Listing.osiedle.isnot(None), Listing.osiedle_src.is_(None))).all()
     pts = [(r[1], r[2], r[3]) for r in rows if not exclude_ids or r[0] not in exclude_ids]
     return OsiedleMap(pts)
 
 
+def _precise():
+    """Точка — дом, а не «где-то в дзельнице» (см. models.Listing.geo_radius_km)."""
+    return or_(Listing.geo_radius_km.is_(None), Listing.geo_radius_km == 0)
+
+
+def backfill_radius(db: Session) -> int:
+    """geo_radius_km для объявлений OLX, записанных до 25.10.2026, — из сырого
+    ответа (поле map). Новые получают его при разборе; после первого прохода
+    здесь пусто, и сырые ответы больше не читаются."""
+    from .sources.olx import olx_geo_radius
+    rows = db.execute(select(Listing.id, Listing.raw_json).where(
+        Listing.source == "olx", Listing.geo_radius_km.is_(None), Listing.raw_json.isnot(None))).all()
+    updates = []
+    for lid, raw in rows:
+        try:
+            mp = (json.loads(raw or "{}") or {}).get("map") or {}
+        except ValueError:
+            mp = {}
+        updates.append({"id": lid, "geo_radius_km": olx_geo_radius(mp)})
+    for i in range(0, len(updates), 2000):
+        db.bulk_update_mappings(Listing, updates[i:i + 2000])
+    db.commit()
+    return len(updates)
+
+
+def drop_unreliable(db: Session) -> Dict[str, int]:
+    """Снять догадки, которым нельзя верить, и дописать дзельницу верным.
+
+    * точка неточная (радиус > 0) — догадка по центру дзельницы, снимаем;
+    * продавец назвал дзельницу, а угаданное осиедле — из другой: у границы
+      соседи ошиблись, снимаем (дзельница продавца остаётся);
+    * дзельницы нет вовсе — берём её из осиедле: без неё объявление не видно в
+      фильтре по дзельнице, а выгодность перескакивает с осиедле сразу на город
+      (25.10.2026 таких активных было 324)."""
+    rows = db.execute(select(Listing.id, Listing.osiedle, Listing.district, Listing.geo_radius_km).where(
+        Listing.osiedle_src == "geo", Listing.osiedle.isnot(None))).all()
+    updates = []
+    cnt = {"approx": 0, "other_district": 0, "district_set": 0}
+    for lid, osiedle, district, radius in rows:
+        own = geo.district_of(osiedle)
+        if radius:
+            cnt["approx"] += 1
+            updates.append({"id": lid, "osiedle": None, "osiedle_src": None})
+        elif district and own and district != own:
+            cnt["other_district"] += 1
+            updates.append({"id": lid, "osiedle": None, "osiedle_src": None})
+        elif not district and own:
+            cnt["district_set"] += 1
+            updates.append({"id": lid, "district": own})
+    for i in range(0, len(updates), 2000):
+        db.bulk_update_mappings(Listing, updates[i:i + 2000])
+    db.commit()
+    return cnt
+
+
 def fill_missing(db: Session, limit: Optional[int] = None) -> Dict[str, int]:
-    """Проставить осиедле там, где его нет, а координаты есть.
+    """Проставить осиедле там, где его нет, а координаты есть и точные.
 
     Пишем в тот же столбец `osiedle` (аналитика и фильтры читают его и ничего
     не знают про источник), а происхождение — в `osiedle_src='geo'`. Если
     площадка позже назовёт осиедле сама, upsert перезапишет: источник главнее.
+    Сначала чистим старые догадки (drop_unreliable): правила стали строже
+    25.10.2026, и записанное до этого должно им подчиниться.
     """
+    radius = backfill_radius(db)
+    dropped = drop_unreliable(db)
     omap = build_map(db)
     if omap.size < MIN_MAP_POINTS:
         log.warning("карта осиедле слишком редкая (%d точек) — пропускаю", omap.size)
-        return {"map_points": omap.size, "filled": 0, "unsure": 0}
-    q = select(Listing.id, Listing.lat, Listing.lon).where(
-        Listing.osiedle.is_(None), Listing.lat.isnot(None), Listing.lon.isnot(None))
+        return {"map_points": omap.size, "filled": 0, "unsure": 0, "dropped": dropped}
+    q = select(Listing.id, Listing.lat, Listing.lon, Listing.district).where(
+        Listing.osiedle.is_(None), Listing.lat.isnot(None), Listing.lon.isnot(None), _precise())
     if limit:
         q = q.limit(limit)
     rows = db.execute(q).all()
-    filled = unsure = 0
+    filled = unsure = conflict = 0
     updates = []
-    for lid, lat, lon in rows:
+    for lid, lat, lon, district in rows:
         name = omap.guess(lat, lon)
-        if name:
-            updates.append({"id": lid, "osiedle": name, "osiedle_src": "geo"})
+        own = geo.district_of(name) if name else None
+        if name and district and own and own != district:
+            conflict += 1                 # соседи говорят одно, продавец — другое
+        elif name:
+            upd = {"id": lid, "osiedle": name, "osiedle_src": "geo"}
+            if not district and own:
+                upd["district"] = own
+            updates.append(upd)
             filled += 1
         else:
             unsure += 1
     for i in range(0, len(updates), 2000):
         db.bulk_update_mappings(Listing, updates[i:i + 2000])
     db.commit()
-    log.info("осиедле по координатам: карта %d точек, проставлено %d, не уверены %d",
-             omap.size, filled, unsure)
-    return {"map_points": omap.size, "filled": filled, "unsure": unsure}
+    log.info("осиедле по координатам: карта %d точек, проставлено %d, не уверены %d, против дзельницы %d",
+             omap.size, filled, unsure, conflict)
+    out = {"map_points": omap.size, "filled": filled, "unsure": unsure, "conflict": conflict}
+    if radius:
+        out["radius_backfilled"] = radius
+    if any(dropped.values()):
+        out["dropped"] = dropped
+    return out

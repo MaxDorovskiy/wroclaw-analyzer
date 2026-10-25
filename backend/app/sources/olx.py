@@ -79,6 +79,20 @@ def _pnum(params: Dict[str, dict], key: str) -> Optional[float]:
         return None
 
 
+def olx_geo_radius(mp: dict) -> int:
+    """Точность точки OLX, км. Без точного адреса OLX ставит точку в центр
+    дзельницы и рисует круг: `show_detailed: false, radius: 8`. На боевой базе
+    25.10.2026 так у 1 557 из 2 725 активных объявлений аренды OLX, и по этим
+    точкам осиедле угадывалось как по адресу: 316 квартир со всех Кшиков
+    записались в Gaj, 277 со Старого Мяста — в Stare Miasto."""
+    if (mp or {}).get("show_detailed"):
+        return 0
+    try:
+        return max(1, int(float(mp.get("radius") or 0)))
+    except (TypeError, ValueError):
+        return 1
+
+
 class Olx(Source):
     name = "olx"
     needs_details = False
@@ -237,7 +251,7 @@ class Olx(Source):
             # у аренды есть «Winda: Tak/Nie» (39 из 49 в живой выдаче 18.09.2026)
             elevator_raw=_pv(params, "winda"),
             location_names=names,
-            lat=mp.get("lat"), lon=mp.get("lon"),
+            lat=mp.get("lat"), lon=mp.get("lon"), geo_radius_km=olx_geo_radius(mp),
             seller_type_raw=seller_raw,
             seller_name=user.get("name") or contact.get("name"),
             seller_id=("user:%s" % user.get("id")) if user.get("id") else None,

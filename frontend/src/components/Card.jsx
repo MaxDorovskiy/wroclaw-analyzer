@@ -272,7 +272,9 @@ export default function Card({ id, onClose, onOpen, geo, goTo }) {
               <div><span className="k">{inv ? 'Квартир у будинку: ' : 'Розміщень: '}</span>{l.group_size || 1}{l.dedup_group ? <span className="muted"> · {l.dedup_group}</span> : null}</div>
               {l.lat != null && l.lon != null && (
                 <div><span className="k">Мапа: </span>
-                  <a href={`https://www.google.com/maps?q=${l.lat},${l.lon}`} target="_blank" rel="noreferrer">{Number(l.lat).toFixed(4)}, {Number(l.lon).toFixed(4)} ↗</a></div>
+                  <a href={`https://www.google.com/maps?q=${l.lat},${l.lon}`} target="_blank" rel="noreferrer">{Number(l.lat).toFixed(4)}, {Number(l.lon).toFixed(4)} ↗</a>
+                  {/* OLX без точного адреса ставит точку в центр дзельницы — это не дом */}
+                  {l.geo_radius_km > 0 && <span className="muted"> · приблизно, площадка показує лише район (±{l.geo_radius_km} км)</span>}</div>
               )}
             </div>
 

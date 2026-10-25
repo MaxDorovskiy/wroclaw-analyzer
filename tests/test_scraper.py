@@ -204,6 +204,42 @@ def test_osiedle_by_coordinates(clean_db, monkeypatch):
     assert geo_knn.build_map(db).size == 24
 
 
+def test_osiedle_not_guessed_from_approximate_olx_point(clean_db, monkeypatch):
+    """OLX без точного адреса ставит точку в центр дзельницы (radius 8 км), и
+    по ней осиедле угадывалось как по адресу: 25.10.2026 316 квартир со всех
+    Кшиков записались в Gaj. Теперь по неточной точке не угадываем, старые такие
+    догадки снимаем, с дзельницей продавца не спорим, пустую дзельницу дописываем."""
+    from app import geo_knn
+    from app.sources.olx import olx_geo_radius
+
+    assert olx_geo_radius({"show_detailed": True, "radius": 0}) == 0
+    assert olx_geo_radius({"show_detailed": False, "radius": 8}) == 8
+    assert olx_geo_radius({}) == 1                                  # нет точки — не точная
+
+    db = clean_db
+    monkeypatch.setattr(geo_knn, "MIN_MAP_POINTS", 10)
+    for i in range(12):
+        db.add(Listing(source="otodom", source_id="o%d" % i, offer_type="sale", is_active=True,
+                       lat=51.0800 + i * 0.0002, lon=17.0300 + i * 0.0002, osiedle=u"Gaj"))
+    at = dict(source="olx", offer_type="rent", is_active=True, lat=51.0802, lon=17.0302)
+    approx = Listing(source_id="a", geo_radius_km=8, district=u"Krzyki", **at)
+    old_guess = Listing(source_id="g", geo_radius_km=8, district=u"Krzyki", osiedle=u"Gaj",
+                        osiedle_src="geo", **at)
+    other = Listing(source_id="c", geo_radius_km=0, district=u"Fabryczna", **at)   # продавец: другая дзельница
+    no_district = Listing(source_id="d", geo_radius_km=0, **at)
+    db.add_all([approx, old_guess, other, no_district])
+    db.commit()
+
+    res = geo_knn.fill_missing(db)
+    for x in (approx, old_guess, other, no_district):
+        db.refresh(x)
+    assert approx.osiedle is None                                   # центр дзельницы — не адрес
+    assert old_guess.osiedle is None and old_guess.osiedle_src is None
+    assert other.osiedle is None and other.district == u"Fabryczna"
+    assert no_district.osiedle == u"Gaj" and no_district.district == u"Krzyki"
+    assert res["conflict"] == 1 and res["dropped"]["approx"] == 1
+
+
 def test_list_run_does_not_erase_condition_from_card(clean_db):
     """Класс состояния выводится из описания, а описание есть только в карточке.
 
