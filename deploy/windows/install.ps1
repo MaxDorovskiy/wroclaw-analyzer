@@ -62,7 +62,13 @@ if ($busy) {
     Write-Host "ИДЁТ ПРОГОН — задачи не переустанавливаю, чтобы его не оборвать. Дождитесь окончания («Прогони») и запустите скрипт снова." -ForegroundColor Yellow
     exit 1
 }
+# Свой pid uvicorn сообщает в /api/health. Stop-ScheduledTask гасит только
+# server.ps1, а дочерний uvicorn выживает и держит порт (10.10.2026): новая задача
+# не могла занять порт, и отвечал старый код — как в safe_restart.ps1, гасим по pid.
+$oldPid = $null
+try { $oldPid = (Invoke-RestMethod -Uri "http://127.0.0.1:$port/api/health" -TimeoutSec 10).pid } catch {}
 Stop-ScheduledTask -TaskName "WroAnalyzer-Server" -ErrorAction SilentlyContinue
+if ($oldPid) { Stop-Process -Id $oldPid -Force -ErrorAction SilentlyContinue }
 Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" |
     Where-Object { $_.CommandLine -like "*server.ps1*" -and $_.ProcessId -ne $PID } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
@@ -96,10 +102,18 @@ $serverTriggers = @(
 )
 Register "WroAnalyzer-Server" ("-File `"" + (Join-Path $PSScriptRoot "server.ps1") + "`"") $serverTriggers
 # Прогоны: продажа 11:00 и 17:00, аренда 02:30 (местное время = Киев; окна не
-# пересекаются с киевской системой, если она на том же IP)
-Register "WroAnalyzer-Scrape-Sale-11" ("-File `"" + (Join-Path $PSScriptRoot "scrape_trigger.ps1") + "`" -Kind sale") (New-ScheduledTaskTrigger -Daily -At 11:00)
-Register "WroAnalyzer-Scrape-Sale-17" ("-File `"" + (Join-Path $PSScriptRoot "scrape_trigger.ps1") + "`" -Kind sale") (New-ScheduledTaskTrigger -Daily -At 17:00)
-Register "WroAnalyzer-Scrape-Rent" ("-File `"" + (Join-Path $PSScriptRoot "scrape_trigger.ps1") + "`" -Kind rent") (New-ScheduledTaskTrigger -Daily -At 02:30)
+# пересекаются с киевской системой, если она на том же IP).
+# New-ScheduledTaskTrigger -At пишет время С ПОЯСОМ («11:00:00+03:00»), и Windows
+# держит его как фиксированный UTC: после перевода часов 25.10.2026 прогоны пошли
+# в 10:00, 16:00 и 01:30. Время без пояса — местное, и перевод часов его не двигает.
+function DailyAt($hhmm) {
+    $t = New-ScheduledTaskTrigger -Daily -At $hhmm
+    $t.StartBoundary = (Get-Date $hhmm).ToString("yyyy-MM-dd'T'HH:mm:ss")
+    return $t
+}
+Register "WroAnalyzer-Scrape-Sale-11" ("-File `"" + (Join-Path $PSScriptRoot "scrape_trigger.ps1") + "`" -Kind sale") (DailyAt "11:00")
+Register "WroAnalyzer-Scrape-Sale-17" ("-File `"" + (Join-Path $PSScriptRoot "scrape_trigger.ps1") + "`" -Kind sale") (DailyAt "17:00")
+Register "WroAnalyzer-Scrape-Rent" ("-File `"" + (Join-Path $PSScriptRoot "scrape_trigger.ps1") + "`" -Kind rent") (DailyAt "02:30")
 # Доступ с других машин домашней сети (Mac, телефон)
 if (-not (Get-NetFirewallRule -DisplayName "Wroclaw Analyzer $port" -ErrorAction SilentlyContinue)) {
     New-NetFirewallRule -DisplayName "Wroclaw Analyzer $port" -Direction Inbound -Protocol TCP -LocalPort $port -Action Allow -Profile Private | Out-Null
