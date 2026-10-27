@@ -23,8 +23,15 @@ function Target({ r, onOpen }) {
     const text = describeQuery(r.query, r.path)
     return <span title={raw}>{text || <span className="mono muted">{raw || '—'}</span>}</span>
   }
+  // что именно поменяли (ключи настроек, часы паузы) — пишет сервер
+  if (r.note) return <span title={raw}>{r.note}</span>
   return <span className="mono muted">{raw || '—'}</span>
 }
+
+// Отказ или ошибка у изменения: попытка без прав тоже действие (с 27.10.2026)
+const Status = ({ r }) => (r.status >= 400
+  ? <span className="badge warn" style={{ marginLeft: 6 }}>{r.status === 403 ? 'відмовлено' : `помилка ${r.status}`}</span>
+  : null)
 
 // Журнал дій користувачів — лише для адміністратора: сервер відповідає 403
 // іншим, а App цю сторінку viewer'у й не показує.
@@ -81,7 +88,7 @@ export default function Journal({ onOpen, me }) {
                 <tr key={i}>
                   <td className="muted" style={{ whiteSpace: 'nowrap' }}>{fmtDateTime(r.at)}</td>
                   <td><b>{r.user}</b></td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{r.action_uk || T.action[r.action] || r.action}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{r.action_uk || T.action[r.action] || r.action}<Status r={r} /></td>
                   <td><Target r={r} onOpen={onOpen} /></td>
                 </tr>
               ))}

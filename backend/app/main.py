@@ -62,7 +62,13 @@ install_json_encoder()
 # WRO_WEB_PASS оставлены для триггеров и совместимости (это логин администратора).
 # Администратор — WRO_WEB_USER (по умолчанию admin): ему настройки, прогоны и
 # журнал; остальным — каталог, карточки, избранное, заметки, экспорт.
+# WRO_WEB_ADMINS = "codex" — ещё логины с правами администратора (владелец
+# 27.10.2026 дал их аудитору Codex; каждое его действие — в журнале).
 ADMIN_USER = os.environ.get("WRO_WEB_USER", "admin")
+
+
+def _admins() -> set:
+    return {ADMIN_USER} | {u.strip() for u in re.split(r"[;,]", os.environ.get("WRO_WEB_ADMINS", "")) if u.strip()}
 
 
 def _users() -> Dict[str, str]:
@@ -87,8 +93,18 @@ _NOISE = ("/api/summary", "/api/runs", "/api/translate/status", "/api/jobs", "/a
           "/api/price_index", "/api/trends", "/api/rent/yield_top", "/api/translate/unknown_values")
 
 
+# Изменения, у которых есть своё имя в журнале (остальные — «other»).
+_WRITE_ACTIONS = (("/api/scrape/stop", "scrape_stop"), ("/api/scrape/pause", "pause"),
+                  ("/api/scrape/resume", "resume"), ("/api/scrape", "scrape"),
+                  ("/api/recompute", "recompute"), ("/api/translate/run", "translate_run"),
+                  ("/api/settings", "settings"), ("/api/profile", "profile"))
+
+
 def _classify(method: str, path: str):
-    """-> (action, listing_id) или None, если писать в журнал нечего."""
+    """-> (action, listing_id) или None, если писать в журнал нечего.
+
+    Любое изменение (не GET) пишется всегда: до 27.10.2026 смена настроек в
+    журнал не попадала вовсе (/api/settings стоял в списке шума)."""
     m = re.match(r"^/api/listings/(\d+)(?:/(\w+))?$", path)
     if m:
         lid = int(m.group(1))
@@ -97,7 +113,11 @@ def _classify(method: str, path: str):
             return "view_card", lid
         if sub in ("favorite", "manual", "detach", "translate"):
             return sub, lid
-        return None
+        return ("other", lid) if method != "GET" else None
+    if method != "GET" and path.startswith("/api/"):
+        for prefix, action in _WRITE_ACTIONS:
+            if path.startswith(prefix):
+                return action, None
     if path == "/api/listings" and method == "GET":
         return "search", None
     if path.startswith("/api/export") or path.startswith("/api/contacts/export"):
@@ -109,19 +129,20 @@ def _classify(method: str, path: str):
     # ответы владельца видны в Журнале как ответы, а не как «инше»
     if path.startswith("/api/questions"):
         return "question", None
-    if method == "POST" and path.startswith("/api/") and not path.startswith(_NOISE):
+    if method != "GET" and path.startswith("/api/"):
         return "other", None
     return None
 
 
-def _write_access(user: str, method: str, path: str, query: str):
+def _write_access(user: str, method: str, path: str, query: str, status: int = None, note: str = None):
     cls = _classify(method, path)
     if not cls:
         return
     db = SessionLocal()
     try:
         db.add(AccessLog(user=user, action=cls[0], method=method, path=path,
-                         query=query[:500] if query else None, listing_id=cls[1]))
+                         query=query[:500] if query else None, listing_id=cls[1],
+                         status=status, note=(note or None) and note[:1000]))
         db.commit()
     except Exception as e:  # noqa: BLE001 — журнал не должен ронять запрос
         db.rollback()
@@ -149,13 +170,16 @@ async def _basic_auth(request: Request, call_next):
                             headers={"WWW-Authenticate": 'Basic realm="Wroclaw Analyzer"'})
     request.state.user = user
     response = await call_next(request)
-    if request.url.path.startswith("/api/") and response.status_code < 400:
+    # чтение — только удачное (неудачный поиск ничего не показал), изменение —
+    # любое: попытка без прав (403) или с ошибкой тоже действие
+    if request.url.path.startswith("/api/") and (response.status_code < 400 or request.method != "GET"):
         # В ПОТОКЕ, а не здесь: это запись в SQLite внутри async-прослойки,
         # то есть прямо в цикле событий. Пока долгий запрос держал базу, она
         # ждала блокировки и с ней ждал весь сервер — не отвечал даже /api/health.
         # Именно так один тяжёлый запрос ронял сайт для всех (10.10.2026).
         await run_in_threadpool(_write_access, user, request.method, request.url.path,
-                                str(request.url.query or ""))
+                                str(request.url.query or ""), response.status_code,
+                                getattr(request.state, "audit_note", None))
     return response
 
 
@@ -164,7 +188,7 @@ def current_user(request: Request) -> str:
 
 
 def is_admin(request: Request) -> bool:
-    return current_user(request) == ADMIN_USER
+    return current_user(request) in _admins()
 
 
 def require_admin(request: Request):
@@ -1095,7 +1119,8 @@ def _pause_value(dt):
 
 
 @app.post("/api/scrape/pause", dependencies=[Depends(require_admin)])
-def api_scrape_pause(body: dict, db: Session = Depends(get_db)):
+def api_scrape_pause(body: dict, request: Request, db: Session = Depends(get_db)):
+    request.state.audit_note = u"годин: %s" % (body.get("hours") or u"до скасування")
     until = scraper.set_pause(db, float(body.get("hours") or 0))
     return {"paused_until": _pause_value(until)}
 
@@ -1162,15 +1187,22 @@ def api_settings(db: Session = Depends(get_db)):
 
 
 @app.post("/api/settings", dependencies=[Depends(require_admin)])
-def api_settings_save(body: dict, db: Session = Depends(get_db)):
+def api_settings_save(body: dict, request: Request, db: Session = Depends(get_db)):
     saved = []
+    before = get_settings(db)
+    changes = []
     for k, v in (body or {}).items():
         if k not in SAFE_KEYS:
             continue
         if k in SECRET_KEYS and v == SECRET_MASK:
             continue        # поле не трогали
-        set_setting(db, k, "" if v is None else str(v))
+        new = "" if v is None else str(v)
+        set_setting(db, k, new)
         saved.append(k)
+        if str(before.get(k) or "") != new:
+            # значение секрета в журнал не пишем — только факт, что его меняли
+            changes.append(u"%s: змінено" % k if k in SECRET_KEYS else u"%s: %s → %s" % (k, before.get(k) or u"—", new or u"—"))
+    request.state.audit_note = u"; ".join(changes) or u"без змін"
     _cache.clear()
     return {"saved": saved}
 
@@ -1180,7 +1212,10 @@ ACTION_UK = {"view_card": u"відкрив(ла) картку", "search": u"шу
              "favorite": u"обране", "note": u"нотатка", "manual": u"ручна правка",
              "detach": u"«інша квартира»", "translate": u"переклад картки",
              "export": u"експорт", "contacts": u"контакти", "presentation": u"презентація PDF",
-             "other": u"дія"}
+             "question": u"відповідь на питання", "settings": u"зміна налаштувань",
+             "scrape": u"запуск прогону", "scrape_stop": u"зупинка прогону", "pause": u"пауза прогонів",
+             "resume": u"зняття паузи", "recompute": u"перерахунок", "translate_run": u"запуск перекладу",
+             "profile": u"візитка", "other": u"дія"}
 
 
 @app.get("/api/activity", dependencies=[Depends(require_admin)])
@@ -1206,6 +1241,7 @@ def api_activity(user: Optional[str] = None, days: int = 14, limit: int = 300,
         per_user[u] = n
     return {"rows": [{"at": r.at, "user": r.user, "action": r.action, "action_uk": ACTION_UK.get(r.action, r.action),
                       "path": r.path, "query": r.query, "listing_id": r.listing_id,
+                      "status": r.status, "note": r.note, "method": r.method,
                       "listing": titles.get(r.listing_id)} for r in rows],
             "per_user": per_user, "days": days}
 

@@ -144,6 +144,14 @@ T.action = {
   contacts: 'контакти',
   presentation: 'презентація PDF',
   question: 'відповідь на питання',
+  settings: 'зміна налаштувань',
+  scrape: 'запуск прогону',
+  scrape_stop: 'зупинка прогону',
+  pause: 'пауза прогонів',
+  resume: 'зняття паузи',
+  recompute: 'перерахунок',
+  translate_run: 'запуск перекладу',
+  profile: 'візитка',
   other: 'інше',
 }
 

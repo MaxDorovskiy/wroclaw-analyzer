@@ -329,3 +329,7 @@ class AccessLog(Base):
     path = Column(String)
     query = Column(Text)
     listing_id = Column(Integer, index=True)
+    # С 27.10.2026 пишутся ВСЕ изменения (любой не-GET), и неудачные тоже: владелец
+    # дал аудитору Codex права администратора и хочет видеть каждое действие.
+    status = Column(Integer)                 # код ответа: 403 — попытка без прав
+    note = Column(Text)                      # что именно: ключи настроек, тип прогона

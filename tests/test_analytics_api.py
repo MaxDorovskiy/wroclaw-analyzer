@@ -517,3 +517,25 @@ def test_split_key_reads_old_and_new_format():
     # ключи без эпохи лежат в базе до первого пересчёта новым кодом
     assert analytics.split_key("city", ["any", "mixed"]) == ([], "any", "mixed", "any")
     assert analytics.split_key("district", ["Krzyki"]) is None
+
+
+def test_second_admin_and_every_change_is_logged(clean_db, monkeypatch):
+    """Владелец 27.10.2026 дал аудитору Codex права администратора — с условием,
+    что каждое действие каждого логина видно в журнале. До этого смена настроек
+    в журнал не попадала вовсе, а отказы (403) не писались."""
+    db = clean_db
+    seed(db, n_sale=20, n_rent=5, rnd=12, post=False)
+    monkeypatch.setenv("WRO_WEB_USERS", "admin:secret1;yulia:secret2;codex:secret3")
+    monkeypatch.setenv("WRO_WEB_ADMINS", "codex")
+    monkeypatch.delenv("WRO_WEB_PASS", raising=False)
+    with TestClient(app) as c:
+        a, y, x = {"auth": ("admin", "secret1")}, {"auth": ("yulia", "secret2")}, {"auth": ("codex", "secret3")}
+        assert c.get("/api/me", **x).json()["role"] == "admin"
+        assert c.get("/api/me", **y).json()["role"] == "viewer"
+        assert c.post("/api/settings", json={"deal_threshold_pct": "12"}, **x).status_code == 200
+        assert c.post("/api/settings", json={"deal_threshold_pct": "5"}, **y).status_code == 403
+        rows = c.get("/api/activity", **a).json()["rows"]
+        mine = [r for r in rows if r["user"] == "codex" and r["action"] == "settings"]
+        assert mine and mine[0]["status"] == 200 and "deal_threshold_pct" in mine[0]["note"] and "12" in mine[0]["note"]
+        denied = [r for r in rows if r["user"] == "yulia" and r["action"] == "settings"]
+        assert denied and denied[0]["status"] == 403
