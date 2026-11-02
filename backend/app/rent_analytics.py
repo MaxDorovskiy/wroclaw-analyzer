@@ -119,7 +119,7 @@ def recompute_yields(db: Session) -> Dict:
     set_setting(db, "area_coef_rent", json.dumps({band_label(b): round(c, 3) for b, c in coef.items()}, ensure_ascii=False))
     set_setting(db, "era_coef_rent", json.dumps({e: round(c, 3) for e, c in sorted(era_coef.items())},
                                                 ensure_ascii=False))
-    reno_sqm = get_float(db, "renovation_cost_sqm_pln", 2000.0)
+    reno_sqm = get_float(db, "renovation_cost_sqm_pln", 3860.0)
     cols = (Listing.id, Listing.price_pln, Listing.area, Listing.rooms, Listing.district,
             Listing.osiedle, Listing.osiedle_override, Listing.condition, Listing.condition_override,
             Listing.build_year, Listing.building_type, Listing.market, Listing.price_note)

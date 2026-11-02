@@ -108,7 +108,7 @@ DEFAULT_SETTINGS = {
     "translate_enabled": "1",
     # аналитика
     "deal_threshold_pct": "10",              # порог «вигідне»
-    "renovation_cost_sqm_pln": "2000",       # отделка «stan deweloperski», zł/м²
+    "renovation_cost_sqm_pln": "3860",       # отделка, zł/м²: решение владельца 24.09.2026 — $1000/м²
     # источники
     "olx_category_sale": "14",
     "olx_category_rent": "15",
