@@ -30,7 +30,7 @@ function Target({ r, onOpen }) {
 
 // Отказ или ошибка у изменения: попытка без прав тоже действие (с 27.10.2026)
 const Status = ({ r }) => (r.status >= 400
-  ? <span className="badge warn" style={{ marginLeft: 6 }}>{r.status === 403 ? 'відмовлено' : `помилка ${r.status}`}</span>
+  ? <span className="badge warn" style={{ marginLeft: 6 }}>{r.status === 403 || r.status === 401 ? 'відмовлено' : `помилка ${r.status}`}</span>
   : null)
 
 // Журнал дій користувачів — лише для адміністратора: сервер відповідає 403

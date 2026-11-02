@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend.app.db import SessionLocal                     # noqa: E402
 from backend.app.models import Listing                      # noqa: E402
-from backend.app.normalize import classify_condition        # noqa: E402
+from backend.app.normalize import classify_condition, price_note  # noqa: E402
 
 BATCH = 1000
 
@@ -56,7 +56,7 @@ def main(dry=False):
         ids = [r[0] for r in db.query(Listing.id).filter(
             Listing.raw_json.isnot(None), Listing.details_fetched.is_(True)).all()]
         print(u"карточек в базе: %d" % len(ids))
-        phones = conds = 0
+        phones = conds = notes = 0
         updates = []
         for i, lid in enumerate(ids, 1):
             row = db.get(Listing, lid)
@@ -70,6 +70,11 @@ def main(dry=False):
                 if ph:
                     patch["seller_phone"] = ph
                     phones += 1
+            # цена нетто + VAT (с 02.11.2026, Codex F-003) — из того же описания
+            note = price_note(row.description_pl, row.price_pln) or u""
+            if note != (row.price_note or u""):
+                patch["price_note"] = note
+                notes += 1
             if not row.condition_override:
                 cond, src = classify_condition(
                     row.construction_status, row.market,
@@ -92,6 +97,7 @@ def main(dry=False):
             db.expunge(row)
         print(u"телефонов проставлено: %d" % phones)
         print(u"состояний исправлено:  %d" % conds)
+        print(u"признак цены netto изменён: %d" % notes)
         if dry:
             print(u"(--dry: ничего не записано)")
         else:

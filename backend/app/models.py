@@ -42,6 +42,9 @@ class Listing(Base):
     price_usd = Column(Float)
     price_eur = Column(Float)
     hide_price = Column(Boolean, default=False)
+    # 'net_vat' — цена нетто, продавец прибавляет VAT (normalize.price_note); такие
+    # не сравниваются с квартирами по полной цене. '' — признака нет.
+    price_note = Column(String)
 
     # --- квартира ---
     area = Column(Float, index=True)
@@ -161,6 +164,11 @@ class Listing(Base):
         # строк вместо сотен тысяч, и обслуживать его почти бесплатно
         Index("ix_listings_desc_pending", "is_active",
               sqlite_where=text("description_uk IS NULL AND description_pl IS NOT NULL")),
+        # «переведено сегодня» (translate._done_today): без него SCAN listings —
+        # ~1 ГБ чтения на вызов, а раздел «Прогони» спрашивает раз в 20 с
+        # (Codex, F-004: 456–486 мс и 1 026 556 116 байт на вызов на копии).
+        Index("ix_listings_translated_desc", "translated_at",
+              sqlite_where=text("description_uk IS NOT NULL")),
     )
 
 

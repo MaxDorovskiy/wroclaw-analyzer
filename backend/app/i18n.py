@@ -133,6 +133,12 @@ LEVELS: Dict[str, Pair] = {
 
 # ключи характеристик Otodom/OLX -> подписи для таблицы в карточке
 CHARACTERISTIC_LABELS: Dict[str, Pair] = {
+    # без подписи до 02.11.2026 (ключ показывался как есть, и в украинской колонке тоже)
+    "winda": (u"Winda", u"Ліфт"),
+    "pets": (u"Zwierzęta", u"Тварини"),
+    "parking": (u"Parking", u"Паркування"),
+    "developer_url": (u"Strona dewelopera", u"Сайт забудовника"),
+    "flat_projection": (u"Rzut mieszkania", u"План квартири"),
     "price": (u"Cena", u"Ціна"),
     "price_per_m": (u"Cena za m²", u"Ціна за м²"),
     "m": (u"Powierzchnia", u"Площа"),

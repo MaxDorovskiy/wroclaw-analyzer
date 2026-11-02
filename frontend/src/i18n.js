@@ -151,7 +151,10 @@ T.action = {
   resume: 'зняття паузи',
   recompute: 'перерахунок',
   translate_run: 'запуск перекладу',
+  restart: 'перезапуск сервера',
   profile: 'візитка',
+  login_failed: 'невдалий вхід',
+  denied: 'відмовлено в доступі',
   other: 'інше',
 }
 

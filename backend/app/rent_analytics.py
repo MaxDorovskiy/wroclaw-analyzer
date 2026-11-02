@@ -122,7 +122,7 @@ def recompute_yields(db: Session) -> Dict:
     reno_sqm = get_float(db, "renovation_cost_sqm_pln", 2000.0)
     cols = (Listing.id, Listing.price_pln, Listing.area, Listing.rooms, Listing.district,
             Listing.osiedle, Listing.osiedle_override, Listing.condition, Listing.condition_override,
-            Listing.build_year, Listing.building_type, Listing.market)
+            Listing.build_year, Listing.building_type, Listing.market, Listing.price_note)
     sale = db.execute(select(*cols).where(Listing.offer_type == "sale", Listing.is_active.is_(True))).all()
     updates = []
     scored = 0
@@ -171,7 +171,7 @@ def yield_top(db: Session, level: str = "osiedle", rooms: Optional[int] = None,
     # без поправки на возраст: здесь ставка места против цены места, обе — как есть
     pools, coef_r, _ = _rent_pools(rent, by_era=False)
     cols = (Listing.price_pln, Listing.area, Listing.rooms, Listing.district, Listing.osiedle,
-            Listing.osiedle_override)
+            Listing.osiedle_override, Listing.price_note)
     sale = [r for r in db.execute(select(*cols).where(
         Listing.offer_type == "sale", Listing.is_active.is_(True),
         Listing.is_representative.is_(True))).all() if _sane(r, "sale")]

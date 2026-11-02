@@ -125,6 +125,36 @@ def test_run_scrape_returns_id_and_reports_skipped(clean_db, fixtures, monkeypat
     assert calls == [("post", False, True), ("translate", False)]
 
 
+def test_run_without_network_is_failed_not_done(clean_db, monkeypatch):
+    """29.10–01.11.2026 ПК был без сети: 11 прогонов не собрали ни одного объявления,
+    а в базе легли как «done, ошибок 0» — прибавку к run.errors стирал db.rollback()."""
+    db = clean_db
+
+    class DeadSource:
+        name = "otodom"
+        skipped = {}
+        needs_details = False
+
+        def iter_pages(self, offer_type, fetcher, start_page=1, settings=None):
+            raise OSError("[WinError 10060] A connection attempt failed")
+            yield  # noqa: unreachable — делает функцию генератором
+
+    class FakeFetcher:
+        stats = {"requests": 1, "retries": 0, "blocked": 0, "browser": 0}
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(scraper, "REGISTRY", {"otodom": DeadSource, "olx": DeadSource})
+    monkeypatch.setattr(scraper, "get_source", lambda name: DeadSource())
+    monkeypatch.setattr(scraper, "make_fetcher", lambda settings, stop_check=None, dump=False: FakeFetcher())
+    monkeypatch.setattr(scraper, "post_process", lambda db, run=None, kind="sale", with_translate=True: u"")
+    monkeypatch.setattr(scraper, "translate_after_run", lambda: None)
+    run = db.get(ScrapeRun, scraper.run_scrape("sale", "all"))
+    assert run.status == "failed" and run.errors == 2 and not run.full
+    assert "WinError 10060" in run.message
+
+
 def test_gone_card_is_not_retried_forever(clean_db):
     """Otodom на снятое объявление отвечает 410 Gone (не 404): карточку больше не просим,
     ошибкой прогона это не считаем. Свежие — по дате подачи, а не по порядку вставки."""
@@ -320,3 +350,33 @@ def test_developer_price_list_is_marked_as_investment(clean_db):
     assert ladder.group_size == 6 and ladder.group_kind == "investment"
     repost = db.query(Listing).filter_by(source_id="s0").one()
     assert repost.group_size == 3 and repost.group_kind is None
+
+
+def test_numeric_key_does_not_glue_different_buildings(clean_db):
+    """Codex 28.10.2026 (F-001): g49 склеивал вторичку 2001 г. на ul. Tolkmicka и
+    первичку 2028 г. на Alei Śliwowej (55,50 и 56,11 м², 639 000 и 639 900 zł) —
+    вторая квартира пряталась как дубль. Но тот же дом с годом 1900 у одного
+    агентства и 1910 у другого — одна квартира, и прайс застройщика до злотого — тоже."""
+    db = clean_db
+    now = datetime.utcnow()
+
+    def flat(sid, price, year, lat, lon, area=55.5, osiedle=u"Krzyki-Partynice"):
+        return Listing(source="otodom", source_id=sid, offer_type="sale", url="https://x/" + sid, rooms=2,
+                       area=area, floor=1, price_pln=price, build_year=year, lat=lat, lon=lon,
+                       osiedle=osiedle, is_active=True, first_seen=now, last_seen=now)
+
+    a = flat("a", 639000.0, 2001, 51.080, 17.020)
+    b = flat("b", 639900.0, 2028, 51.060, 17.060, area=56.11)          # другой дом, 3+ км
+    c1 = flat("c1", 590000.0, 1900, 51.124, 17.0295)                   # каменица: агентства
+    c2 = flat("c2", 595000.0, 1910, 51.124, 17.0296)                   # пишут разный год
+    d1 = flat("d1", 385303.0, 2027, 51.1356, 16.9252)                  # прайс застройщика —
+    d2 = flat("d2", 385302.75, 2027, 51.1204, 16.9286)                 # метка «улетела» на 2 км
+    db.add_all([a, b, c1, c2, d1, d2])
+    db.commit()
+    res = dedup.rebuild_groups(db)
+    for x in (a, b, c1, c2, d1, d2):
+        db.refresh(x)
+    assert a.dedup_group != b.dedup_group and a.is_representative and b.is_representative
+    assert c1.dedup_group == c2.dedup_group
+    assert d1.dedup_group == d2.dedup_group
+    assert res["refused"] >= 1

@@ -539,3 +539,73 @@ def test_second_admin_and_every_change_is_logged(clean_db, monkeypatch):
         assert mine and mine[0]["status"] == 200 and "deal_threshold_pct" in mine[0]["note"] and "12" in mine[0]["note"]
         denied = [r for r in rows if r["user"] == "yulia" and r["action"] == "settings"]
         assert denied and denied[0]["status"] == 403
+
+
+def test_codex_f002_f006_f007_f008_f009(clean_db, monkeypatch):
+    """Находки Codex 28.10.2026: правка состояния пересчитывает оценки (F-002),
+    отказы на чтение и неверный вход пишутся в журнал (F-006), экспорт не
+    превращает текст в формулу (F-007), огромный page — 400, а не 500 (F-008),
+    служебный ключ площадки не показывается в карточке (F-009)."""
+    import io
+    import json
+    from app import main as M
+    from app.models import AccessLog
+
+    db = clean_db
+    seed(db, n_sale=60, n_rent=80, rnd=13, post=True)
+    monkeypatch.setenv("WRO_WEB_USERS", "admin:secret1;yulia:secret2")
+    monkeypatch.delenv("WRO_WEB_PASS", raising=False)
+    a, y = {"auth": ("admin", "secret1")}, {"auth": ("yulia", "secret2")}
+    with TestClient(app) as c:
+        # F-008
+        assert c.get("/api/listings?page=1e100", **a).status_code == 400
+        assert c.get("/api/contacts?page=9999999999999999999999", **a).status_code == 400
+        assert c.get("/api/listings?per_page=1e100", **a).status_code == 200
+        # F-006
+        n0 = db.query(AccessLog).count()
+        assert c.get("/api/settings", **y).status_code == 403
+        assert c.get("/api/listings", auth=("admin", "wrong")).status_code == 401
+        assert c.get("/api/listings").status_code == 401            # без заголовка — не попытка
+        rows = db.query(AccessLog).order_by(AccessLog.id).all()[n0:]
+        assert [(r.user, r.action, r.status) for r in rows] == [
+            ("yulia", "denied", 403), ("?admin", "login_failed", 401)]
+        assert all("wrong" not in ((r.query or "") + (r.note or "")) for r in rows)
+        # F-002
+        l = db.query(Listing).filter(Listing.offer_type == "sale", Listing.yield_pct.isnot(None)).first()
+        before = l.yield_pct
+        assert c.post("/api/listings/%d/manual" % l.id, json={"condition": "to_renovate"}, **a).status_code == 200
+        M._rescore_now()
+        db.expire_all()
+        l = db.get(Listing, l.id)
+        assert l.yield_reno_cost_pln > 0 and l.yield_pct < before
+        # F-009
+        l.characteristics_json = json.dumps({"is_ai_video_enabled": {"value": "1"}, "winda": {"label": "Winda", "value": "Tak"}})
+        db.commit()
+        keys = [x["key"] for x in c.get("/api/listings/%d" % l.id, **a).json()["characteristics"]]
+        assert "is_ai_video_enabled" not in keys and "winda" in keys
+        # F-007
+        l.title_pl = "=1+1"
+        db.commit()
+        csv_text = c.get("/api/export?format=csv&per_page=200", **a).content.decode("utf-8-sig")
+        assert "'=1+1" in csv_text
+        from openpyxl import load_workbook
+        wb = load_workbook(io.BytesIO(c.get("/api/export?format=xlsx", **a).content))
+        cells = [cell for row in wb.active.iter_rows() for cell in row if cell.value == "=1+1"]
+        assert cells and all(cell.data_type == "s" for cell in cells)
+
+
+def test_admin_restart_refuses_during_run_and_for_viewer(clean_db, monkeypatch):
+    """Выкатка без прав Windows: процесс выходит сам, server.ps1 поднимает новый.
+    Не во время прогона и не для «просмотра»; сам выход в тесте подменён."""
+    from app import main as M
+    monkeypatch.setenv("WRO_WEB_USERS", "admin:secret1;yulia:secret2")
+    monkeypatch.delenv("WRO_WEB_PASS", raising=False)
+    exits = []
+    monkeypatch.setattr(M, "_bg", lambda fn, *a: exits.append(fn))
+    with TestClient(app) as c:
+        assert c.post("/api/admin/restart", auth=("yulia", "secret2")).status_code == 403
+        monkeypatch.setattr(M.scraper, "is_running", lambda: True)
+        assert c.post("/api/admin/restart", auth=("admin", "secret1")).status_code == 409
+        monkeypatch.setattr(M.scraper, "is_running", lambda: False)
+        r = c.post("/api/admin/restart", auth=("admin", "secret1"))
+        assert r.status_code == 200 and r.json()["restarting"] is True and len(exits) == 1

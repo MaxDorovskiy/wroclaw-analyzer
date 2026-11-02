@@ -104,3 +104,55 @@ def test_condition_respects_negation():
     ]
     for text, want in cases:
         assert c(None, None, text, None)[0] == want, text
+
+
+def test_net_price_plus_vat_is_flagged_only_when_the_price_is_net():
+    """Codex 28.10.2026 (F-003): цена нетто стояла в выгодных с «−50,7%». Но
+    «Netto» — ещё и сеть магазинов, и «… zł netto + VAT» у паркинга или
+    мебели при цене квартиры брутто — не признак."""
+    from app.normalize import price_note
+    assert price_note(u"Podana cenna jest ceną netto plus 23%VAT. Możliwość odliczenia", 234359.0) == "net_vat"
+    assert price_note(u"Cena: 373 983,73 zł netto + VAT 23% tj. 460 000 zł brutto.", 373983.0) == "net_vat"
+    # сохранена брутто-цена — признака нет
+    assert price_note(u"Cena: 308 130 zł netto + 23% VAT = 379 000,00 zł brutto", 379000.0) is None
+    assert price_note(u"miejsce parkingowe w cenie 8 130,08 zł netto + 23%VAT razem 10 000 zł brutto", 630228.0) is None
+    assert price_note(u"W pobliżu sklep Netto i Biedronka", 500000.0) is None
+    assert price_note(u"przychód 8 000 zł netto miesięcznie", 8000.0) is None
+
+
+def test_ollama_stream_yields_gpu_mid_answer(monkeypatch):
+    """Codex 28.10.2026 (F-005): запрос к модели шёл одним куском до 300 с, и
+    реестр видеокарты не спрашивали, пока он не кончится. Теперь — потоком, и
+    между кусками ответа: карту забрали — обрываем, текст остаётся в очереди."""
+    import json as _json
+    import pytest
+    from app import translate as T
+
+    chunks = [{"message": {"content": u"При"}}, {"message": {"content": u"віт"}},
+              {"message": {"content": u"!"}, "done": True}]
+
+    class FakeResp:
+        def raise_for_status(self):
+            pass
+
+        def iter_lines(self):
+            for c in chunks:
+                yield _json.dumps(c)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(T.httpx, "stream", lambda *a, **kw: FakeResp())
+    p = T.OllamaProvider("http://x", "m")
+    T._state["yield_check"] = None
+    assert p.translate([u"Cześć!"]) == [u"Привіт!"]
+    answers = iter([True, False])                       # на втором куске карту забрали
+    T._state["yield_check"] = lambda: next(answers)
+    try:
+        with pytest.raises(T.GpuYield):
+            p.translate([u"Cześć!"])
+    finally:
+        T._state["yield_check"] = None

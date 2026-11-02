@@ -15,6 +15,7 @@ import random
 import re
 import secrets
 import threading
+import time
 from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -97,6 +98,7 @@ _NOISE = ("/api/summary", "/api/runs", "/api/translate/status", "/api/jobs", "/a
 _WRITE_ACTIONS = (("/api/scrape/stop", "scrape_stop"), ("/api/scrape/pause", "pause"),
                   ("/api/scrape/resume", "resume"), ("/api/scrape", "scrape"),
                   ("/api/recompute", "recompute"), ("/api/translate/run", "translate_run"),
+                  ("/api/admin/restart", "restart"),
                   ("/api/settings", "settings"), ("/api/profile", "profile"))
 
 
@@ -136,6 +138,13 @@ def _classify(method: str, path: str):
 
 def _write_access(user: str, method: str, path: str, query: str, status: int = None, note: str = None):
     cls = _classify(method, path)
+    # Отказ — всегда действие, даже на чтение: GET /api/settings от «просмотра»
+    # (403) и вход с неверным паролем (401) не писались (Codex, F-006).
+    # У изменения остаётся своё имя («зміна налаштувань», код 403) — видно, ЧТО пытались.
+    if status == 401:
+        cls = ("login_failed", None)
+    elif status == 403 and not cls:
+        cls = ("denied", None)
     if not cls:
         return
     db = SessionLocal()
@@ -166,13 +175,24 @@ async def _basic_auth(request: Request, call_next):
             except Exception:  # noqa: BLE001
                 ok = False
         if not ok:
+            # Пустой заголовок — обычный первый запрос браузера до окна входа, не
+            # попытка; неверный пароль — пишем под тем именем, которое ввели (без
+            # пароля). Имя обрезаем: в нём может быть что угодно.
+            if auth.startswith("Basic ") and request.url.path.startswith("/api/"):
+                try:
+                    tried = base64.b64decode(auth[6:]).decode("utf-8", "replace").partition(":")[0]
+                except Exception:  # noqa: BLE001
+                    tried = ""
+                await run_in_threadpool(_write_access, u"?" + (re.sub(r"\s+", " ", tried)[:40] or u"без імені"),
+                                        request.method, request.url.path, "", 401, u"невдалий вхід")
             return Response(u"Потрібен вхід", status_code=401,
                             headers={"WWW-Authenticate": 'Basic realm="Wroclaw Analyzer"'})
     request.state.user = user
     response = await call_next(request)
     # чтение — только удачное (неудачный поиск ничего не показал), изменение —
     # любое: попытка без прав (403) или с ошибкой тоже действие
-    if request.url.path.startswith("/api/") and (response.status_code < 400 or request.method != "GET"):
+    if request.url.path.startswith("/api/") and (response.status_code < 400 or request.method != "GET"
+                                                 or response.status_code == 403):
         # В ПОТОКЕ, а не здесь: это запись в SQLite внутри async-прослойки,
         # то есть прямо в цикле событий. Пока долгий запрос держал базу, она
         # ждала блокировки и с ней ждал весь сервер — не отвечал даже /api/health.
@@ -257,6 +277,7 @@ def row_dict(l: Listing, ph: Optional[dict] = None, is_fav: bool = False) -> Dic
         "osiedle": osiedle, "osiedle_uk": geo.osiedle_uk(osiedle),
         "osiedle_src": "manual" if l.osiedle_override else (l.osiedle_src or "source"),
         "street": l.street, "lat": l.lat, "lon": l.lon, "geo_radius_km": l.geo_radius_km,
+        "price_note": l.price_note or None,
         "seller_type": l.seller_type, "seller_type_uk": i18n.uk("seller_type", l.seller_type),
         "seller_name": l.seller_name, "seller_phone": l.seller_phone, "seller_id": l.seller_id,
         "seller_key": seller_key(l), "no_commission": l.no_commission,
@@ -300,6 +321,9 @@ def _price_stats(db: Session, ids: List[int]) -> Dict[int, dict]:
     return out
 
 
+HIDDEN_CHARACTERISTICS = {"is_ai_video_enabled"}
+
+
 def _characteristics(l: Listing) -> List[dict]:
     try:
         chars = json.loads(l.characteristics_json or "{}") or {}
@@ -312,7 +336,9 @@ def _characteristics(l: Listing) -> List[dict]:
                 "equipment_types": "extras"}
     out = []
     for key, c in chars.items():
-        if not isinstance(c, dict):
+        # служебные флаги площадки — не характеристика квартиры (Codex, F-009:
+        # «is_ai_video_enabled» стоял в карточке в обеих колонках, у 797 активных)
+        if not isinstance(c, dict) or key in HIDDEN_CHARACTERISTICS:
             continue
         label_pl, label_uk = i18n.label_pair(key)
         if c.get("label"):
@@ -451,6 +477,18 @@ def _num(p: dict, key: str, default=None):
     return n
 
 
+MAX_PAGE = 1000000
+
+
+def _page(p: dict, max_per_page: int):
+    """(page, per_page) с границами. page=1e100 — конечное число, _num его
+    пропускал, а OFFSET за пределами 64 бит ронял ручку в 500 (Codex, F-008)."""
+    page = _num(p, "page", 1)
+    if page > MAX_PAGE:
+        raise HTTPException(400, u"параметр page: не більше %d" % MAX_PAGE)
+    return max(1, int(page)), min(max_per_page, max(1, int(min(_num(p, "per_page", 50), max_per_page))))
+
+
 def _csv(v: Optional[str]) -> List[str]:
     return [x.strip() for x in (v or "").split(",") if x.strip()]
 
@@ -570,8 +608,7 @@ def api_listings(request: Request, db: Session = Depends(get_db)):
     sort = Favorite.at if key == "fav" else SORTS.get(key, Listing.first_seen)
     order = (p.get("order") or ("asc" if p.get("sort") in ("price", "price_sqm") else "desc")).lower()
     q = q.order_by(sort.asc().nullslast() if order == "asc" else sort.desc().nullslast(), Listing.id.desc())
-    page = max(1, int(_num(p, "page", 1)))
-    per_page = min(200, max(1, int(_num(p, "per_page", 50))))
+    page, per_page = _page(p, 200)
     rows = q.offset((page - 1) * per_page).limit(per_page).all()
     ph = _price_stats(db, [r.id for r in rows])
     favs = fav_ids(db, current_user(request), [r.id for r in rows])
@@ -768,6 +805,8 @@ def api_manual(request: Request, lid: int, body: dict, db: Session = Depends(get
         l.note = body["note"] or None
     _log_action(db, lid, "manual", body, request)
     db.commit()
+    if "osiedle" in body or "condition" in body:
+        _schedule_rescore()
     return full_dict(db, l, current_user(request))
 
 
@@ -778,7 +817,50 @@ def api_detach(request: Request, lid: int, db: Session = Depends(get_db)):
         raise HTTPException(404)
     _log_action(db, lid, "detach", {}, request)
     db.commit()
+    _schedule_rescore()
     return {"dedup_group": g}
+
+
+# Ручная правка места/состояния и «інша квартира» меняют базы сравнения, а
+# скидка и доходность пересчитывались только после следующего прогона: правка
+# «под ремонт» оставляла доходность 4,60% без ~198 тыс. zł отделки (Codex, F-002).
+# Пересчёт — фоном и одним на серию правок: 20 с задержки собирают несколько
+# сохранений подряд; сам пересчёт ~20 с на всю продажу.
+RESCORE_DELAY_S = 20
+_rescore = {"timer": None}
+_rescore_guard = threading.Lock()
+
+
+def _rescore_now():
+    with _rescore_guard:
+        _rescore["timer"] = None
+    if scraper.is_running():
+        # прогон держит базу; его собственный пересчёт мог пройти до правки —
+        # повторяем после него
+        _schedule_rescore(300)
+        return
+    db = SessionLocal()
+    try:
+        analytics.recompute_deal_scores(db)
+        rent_analytics.recompute_yields(db)
+        log.info("пересчёт после ручной правки — готово")
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        log.error("пересчёт после ручной правки: %s", e)
+    finally:
+        db.close()
+        _cache.clear()
+
+
+def _schedule_rescore(delay: float = RESCORE_DELAY_S):
+    if os.environ.get("WRO_RESCORE") == "off":   # тесты: таймер пережил бы свой тест
+        return
+    with _rescore_guard:
+        if _rescore["timer"] is None:
+            t = threading.Timer(delay, _rescore_now)
+            t.daemon = True
+            _rescore["timer"] = t
+            t.start()
 
 
 # ---------- справочники и сводка ----------
@@ -990,8 +1072,7 @@ def _contacts(db: Session, p: dict) -> List[dict]:
 def api_contacts(request: Request, db: Session = Depends(get_db)):
     p = dict(request.query_params)
     rows = _contacts(db, p)
-    page = max(1, int(_num(p, "page", 1)))
-    per_page = min(500, max(1, int(_num(p, "per_page", 50))))
+    page, per_page = _page(p, 500)
     return {"total": len(rows), "page": page, "per_page": per_page,
             "items": rows[(page - 1) * per_page: page * per_page]}
 
@@ -1007,6 +1088,11 @@ def _table_response(rows: List[dict], columns: List[str], fmt: str, name: str):
         ws.append(columns)
         for r in rows:
             ws.append([_cell(r.get(c)) for c in columns])
+            # Текст площадки и заметок — всегда текст: openpyxl строку «=…» пишет
+            # формулой, и заголовок объявления исполнился бы в Excel (Codex, F-007)
+            for cell in ws[ws.max_row]:
+                if cell.data_type == "f":
+                    cell.data_type = "s"
         buf = io.BytesIO()
         wb.save(buf)
         buf.seek(0)
@@ -1016,10 +1102,18 @@ def _table_response(rows: List[dict], columns: List[str], fmt: str, name: str):
     w = csv.writer(buf, delimiter=";")
     w.writerow(columns)
     for r in rows:
-        w.writerow([_cell(r.get(c)) for c in columns])
+        w.writerow([_csv_safe(_cell(r.get(c))) for c in columns])
     data = ("﻿" + buf.getvalue()).encode("utf-8")
     return Response(data, media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": "attachment; filename=%s.csv" % name})
+
+
+def _csv_safe(v):
+    """Строка с «= + - @» в начале Excel откроет как формулу — экранируем
+    апострофом. Числа не трогаем: «-5» в колонке скидки — число, а не текст."""
+    if isinstance(v, str) and v[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + v
+    return v
 
 
 def _cell(v):
@@ -1140,6 +1234,30 @@ def _recompute_bg():
         _cache.clear()
 
 
+@app.post("/api/admin/restart", dependencies=[Depends(require_admin)])
+def api_admin_restart():
+    """Выкатка кода без прав администратора Windows.
+
+    Задача сервера работает под входом S4U от администратора: остановить её
+    (safe_restart.ps1) можно только из окна с правами, и каждая выкатка ждала
+    владельца — с 15.10 по 02.11.2026 таких просьб было четыре. А server.ps1 —
+    надзиратель: вышел uvicorn — через 5 с поднимет новый, уже с новым кодом.
+    Поэтому процесс выходит сам. Только между прогонами и не во время перевода
+    (заявка на видеокарту осталась бы висеть). Логины из env.ps1 так НЕ
+    перечитываются — для них по-прежнему safe_restart.ps1."""
+    if scraper.is_running():
+        raise HTTPException(409, u"іде прогін — перезапуск після нього")
+    if translate._state.get("running"):
+        raise HTTPException(409, u"іде переклад — перезапуск після нього")
+
+    def _exit_soon():
+        time.sleep(1.5)                  # дать ответу уйти клиенту
+        log.warning("перезапуск по /api/admin/restart: процесс выходит, server.ps1 поднимет новый")
+        os._exit(0)
+    _bg(_exit_soon)
+    return {"restarting": True, "pid": os.getpid(), "started_at": STARTED_AT}
+
+
 @app.post("/api/recompute", dependencies=[Depends(require_admin)])
 def api_recompute():
     _bg(_recompute_bg)
@@ -1149,7 +1267,8 @@ def api_recompute():
 # ---------- перевод ----------
 @app.get("/api/translate/status")
 def api_translate_status(db: Session = Depends(get_db)):
-    return translate.status(db)
+    # раздел «Прогони» опрашивает раз в 20 с — полминуты свежести хватает
+    return _cached("translate-status-live", lambda: translate.status(db), 30)
 
 
 def _translate_bg(limit: Optional[int]):
@@ -1215,7 +1334,9 @@ ACTION_UK = {"view_card": u"відкрив(ла) картку", "search": u"шу
              "question": u"відповідь на питання", "settings": u"зміна налаштувань",
              "scrape": u"запуск прогону", "scrape_stop": u"зупинка прогону", "pause": u"пауза прогонів",
              "resume": u"зняття паузи", "recompute": u"перерахунок", "translate_run": u"запуск перекладу",
-             "profile": u"візитка", "other": u"дія"}
+             "restart": u"перезапуск сервера",
+             "profile": u"візитка", "login_failed": u"невдалий вхід", "denied": u"відмовлено в доступі",
+             "other": u"дія"}
 
 
 @app.get("/api/activity", dependencies=[Depends(require_admin)])

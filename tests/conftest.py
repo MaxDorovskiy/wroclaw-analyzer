@@ -16,6 +16,9 @@ os.environ["DISABLE_SCHEDULER"] = "1"
 # 26.09.2026 тесты подняли приложение на временной базе без настроек, и старт
 # записал в боевой реестр чужое имя модели.
 os.environ["GPU_REGISTRY"] = "off"
+# Фоновый пересчёт после ручной правки (main._schedule_rescore) — таймер; в тестах
+# он сработал бы уже в чужом тесте. Тест пересчёта зовёт main._rescore_now сам.
+os.environ["WRO_RESCORE"] = "off"
 os.environ.pop("WRO_WEB_PASS", None)
 sys.path.insert(0, str(ROOT / "backend"))
 sys.path.insert(0, str(ROOT / "scripts"))

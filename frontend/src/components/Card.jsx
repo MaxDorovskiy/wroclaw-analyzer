@@ -87,6 +87,10 @@ const poolKey = (e) => e.key_uk || (e.key ? [].concat(e.key).join(' · ') : '')
 // тим самим кодом, що й розрахунок (backend analytics.explain).
 function DealExplain({ l }) {
   const e = l.deal_explain
+  // цена нетто: продавец прибавляет VAT — с соседями по полной цене не сравниваем
+  if (l.price_note === 'net_vat') {
+    return <p className="muted">Ціна netto: продавець пише, що до неї додається ПДВ (VAT). Із сусідами за повною ціною не порівнюємо — знижку й дохідність не пораховано</p>
+  }
   if (!e) return <p className="muted">Знижку не пораховано: замало схожих квартир або оголошення зняте</p>
   return (
     <div className="explain">
@@ -126,6 +130,7 @@ function DealExplain({ l }) {
 
 function RentExplain({ l }) {
   const e = l.rent_explain
+  if (l.price_note === 'net_vat') return <p className="muted">Ціна netto без ПДВ — дохідність не пораховано</p>
   if (!e) return <p className="muted">Дохідність не пораховано: поруч немає оголошень оренди</p>
   return (
     <div className="explain">
@@ -199,6 +204,9 @@ export default function Card({ id, onClose, onOpen, geo, goTo }) {
     (form.osiedle || '') !== (l.osiedle || '')
     || (form.condition || '') !== (l.condition || '')
     || (form.note || '') !== (l.note || ''))
+  // смена места или состояния меняет базу сравнения — сервер пересчитает оценки фоном
+  const willRescore = l && ((form.osiedle || '') !== (l.osiedle || '')
+    || (form.condition || '') !== (l.condition || ''))
   const saveManual = () => run('manual', async () => {
     const patch = {}
     if ((form.osiedle || '') !== (l.osiedle || '')) patch.osiedle = form.osiedle || null
@@ -207,7 +215,7 @@ export default function Card({ id, onClose, onOpen, geo, goTo }) {
     const d = await api.manual(id, patch)
     setL(d)
     setForm({ osiedle: d.osiedle || '', condition: d.condition || '', note: d.note || '' })
-  }, 'Збережено')
+  }, willRescore ? 'Збережено. Знижку й дохідність буде перераховано протягом хвилини' : 'Збережено')
 
   const modal = useModal(onClose, () => !!dirty)
 

@@ -47,7 +47,7 @@ PROTECTED = {"condition_override", "osiedle_override", "note", "is_favorite",
 # 81% объявлений продажи числились "невідомо", и пулы выгодности сравнивали
 # ремонт с бетоном в одной корзине (стало 33%).
 DETAILS_ONLY = {"description_pl", "characteristics_json", "raw_json",
-                "condition", "condition_src"}
+                "condition", "condition_src", "price_note"}
 # причины Source.skipped — для сообщения прогона
 SKIP_LABELS = {"investment": u"инвестиций целиком", "outside": u"вне Вроцлава"}
 
@@ -410,6 +410,10 @@ def run_scrape(kind: str = "sale", sources: str = "all", dump: bool = False) -> 
     unknown: Dict[tuple, int] = {}
     fetcher = make_fetcher(settings, stop_check=_stop_requested, dump=dump)
     completed: List[str] = []
+    # Сбои источников считаем ЗДЕСЬ, а не в run.errors: `run.errors += 1` и следом
+    # db.rollback() стирали прибавку, и 29.10–01.11.2026 (ПК без сети) 11 прогонов
+    # подряд, не собравших ни одного объявления, легли в базу как «done, ошибок 0».
+    failed: List[str] = []
     status = "done"
     notes: List[str] = []
     try:
@@ -428,12 +432,12 @@ def run_scrape(kind: str = "sale", sources: str = "all", dump: bool = False) -> 
             except StopRequested:
                 raise
             except BlockedError as e:
-                run.errors += 1
+                failed.append(name)
                 notes.append(u"%s: блок анти-бота (%s) — источник пропущен" % (name, e))
                 log.error("%s: %s", name, e)
                 db.rollback()
             except Exception as e:  # noqa: BLE001
-                run.errors += 1
+                failed.append(name)
                 notes.append(u"%s: %s" % (name, e))
                 log.error("%s: %s\n%s", name, e, traceback.format_exc())
                 db.rollback()
@@ -460,6 +464,10 @@ def run_scrape(kind: str = "sale", sources: str = "all", dump: bool = False) -> 
         fetcher.close()
         try:
             run = db.get(ScrapeRun, run_id) or run
+            run.errors = (run.errors or 0) + len(failed)
+            # ни один источник не прошёл — это сбой прогона, а не «готово»
+            if status == "done" and failed and not completed:
+                status = "failed"
             run.status = status
             run.finished_at = datetime.utcnow()
             run.last_beat = run.finished_at

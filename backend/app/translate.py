@@ -16,6 +16,7 @@ PROMPT_VERSION: старые переводы станут «устаревши�
 """
 import hashlib
 import html
+import json
 import logging
 import os
 import re
@@ -119,18 +120,43 @@ class OllamaProvider(Provider):
     def translate(self, texts: List[str]) -> List[str]:
         out = []
         for t in texts:
-            r = httpx.post(self.url + "/api/chat", json={
-                "model": self.model, "stream": False,
+            out.append(_strip_think(self._chat(t)).strip())
+        return out
+
+    def _chat(self, text: str) -> str:
+        """Потоком, чтобы во время длинного ответа спрашивать реестр видеокарты.
+
+        Одним запросом (stream=False) модель могла думать до 300 с, и всё это
+        время мы не узнавали, что карту забрали: правило реестра — уступить в
+        пределах минуты (Codex 28.10.2026, F-005). Теперь между кусками ответа
+        зовётся _state["yield_check"] (lease.allowed: сам спрашивает реестр раз в
+        минуту); отказ — обрываем поток (Ollama бросает генерацию, когда клиент
+        отключился) и бросаем GpuYield: текст вернётся в очередь без ошибки."""
+        check = _state.get("yield_check")
+        parts = []
+        with httpx.stream("POST", self.url + "/api/chat", json={
+                "model": self.model, "stream": True,
                 # думающие модели (qwen3.x) без этого пишут рассуждения минутами
                 "think": False,
                 "messages": [{"role": "system", "content": SYSTEM_PROMPT},
-                             {"role": "user", "content": t}],
+                             {"role": "user", "content": text}],
                 "options": {"temperature": 0.1, "num_ctx": self.num_ctx},
-            }, timeout=300)
+        }, timeout=httpx.Timeout(300.0, read=120.0)) as r:
             r.raise_for_status()
-            msg = (r.json().get("message") or {}).get("content") or ""
-            out.append(_strip_think(msg).strip())
-        return out
+            for line in r.iter_lines():
+                if check is not None and not check():
+                    raise GpuYield()
+                if not line:
+                    continue
+                chunk = json.loads(line)
+                parts.append((chunk.get("message") or {}).get("content") or "")
+                if chunk.get("done"):
+                    break
+        return "".join(parts)
+
+
+class GpuYield(Exception):
+    """Карту забрали посреди ответа модели — уступаем, текст остаётся в очереди."""
 
 
 def _strip_think(s: str) -> str:
@@ -497,6 +523,8 @@ def translate_pending(db: Session, limit: Optional[int] = None,
             _state["gpu"] = None
         with (_Claim(gpu, note, GPU_VRAM_GB)
               if gpu is not None else _NoLease()) as lease:
+            # проверка очереди и ВНУТРИ ответа модели (OllamaProvider._chat)
+            _state["yield_check"] = lease.allowed if gpu is not None else None
             # свежие — по дате подачи (см. тот же довод в scraper._scrape_details): по first_seen
             # первая очередь из 20 целиком ушла на одну инвестицию с последней страницы выдачи
             fresh = (Listing.is_representative.desc(), Listing.posted_at.desc(), Listing.first_seen.desc())
@@ -513,6 +541,10 @@ def translate_pending(db: Session, limit: Optional[int] = None,
                     translate_listing(db, row, provider, with_description=False)
                     done_t += 1
                     errors = 0
+                except GpuYield:
+                    db.rollback()
+                    yielded = True
+                    break
                 except Exception as e:  # noqa: BLE001
                     db.rollback()
                     errors += 1
@@ -536,6 +568,10 @@ def translate_pending(db: Session, limit: Optional[int] = None,
                     translate_listing(db, row, provider)
                     done_d += 1
                     errors = 0
+                except GpuYield:
+                    db.rollback()
+                    yielded = True
+                    break
                 except Exception as e:  # noqa: BLE001
                     db.rollback()
                     errors += 1
@@ -548,6 +584,7 @@ def translate_pending(db: Session, limit: Optional[int] = None,
         return u"заголовков %d, описаний %d (потолок %d/сутки)%s" % (done_t, done_d, cap, tail)
     finally:
         _state["running"] = False
+        _state["yield_check"] = None
 
 
 def status(db: Session) -> Dict:

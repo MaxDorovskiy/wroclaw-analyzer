@@ -243,6 +243,36 @@ def _says(rx, text: str) -> bool:
     return False
 
 
+_RX_NET_SAID = re.compile(u"(?i)cen\\w*\\s+(jest\\s+)?(cen\\w*\\s+)?netto\\s*(\\+|plus)\\s*(\\d{1,2}\\s*%\\s*)?vat")
+_RX_NET_SUM = re.compile(u"(?i)(\\d[\\d\\s\\u00a0.]*(?:,\\d{1,2})?)\\s*(zł|pln)\\s*netto\\s*(\\+|plus)")
+
+
+def price_note(description: Optional[str], price: Optional[float]) -> Optional[str]:
+    """'net_vat' — показанная цена нетто, к ней продавец прибавляет VAT.
+
+    Codex 28.10.2026 (F-003): ID 30224 «Podana cena jest ceną netto plus 23%VAT»
+    стояла в выгодных с «−50,7%» и доходностью 7,26% — с VAT цена на 54 тыс. zł
+    выше. Слово «netto» само по себе — не признак: чаще всего это сеть магазинов
+    «Netto» или доход от аренды «netto»; у восьми из двенадцати объявлений с
+    «… zł netto + VAT» на копии 02.11 сохранённая цена уже брутто, а «netto»
+    относится к паркингу или мебели. Поэтому — либо прямая фраза «цена — нетто
+    плюс VAT», либо сумма «X zł netto +» равна сохранённой цене (±2%)."""
+    text = description or u""
+    if not text or not price:
+        return None
+    if _RX_NET_SAID.search(text):
+        return "net_vat"
+    for m in _RX_NET_SUM.finditer(text):
+        digits = re.sub(u"[\\s\\u00a0.]", u"", m.group(1)).replace(u",", u".")
+        try:
+            amount = float(digits)
+        except ValueError:
+            continue
+        if amount and abs(amount - price) / price <= 0.02:
+            return "net_vat"
+    return None
+
+
 def classify_condition(construction_status: Optional[str], market: Optional[str],
                        title: str, description: Optional[str]):
     """-> (class, src). Структурная метка сильнее слов, но слова уточняют её."""
@@ -381,6 +411,8 @@ def normalize(raw: RawListing) -> Dict[str, Any]:
     cond, src = classify_condition(d["construction_status"], d["market"],
                                    d["title_pl"] or u"", d.get("description_pl"))
     d["condition"], d["condition_src"] = cond, src
+    # "" — признака нет (не None: upsert пропускает None и не снял бы старый признак)
+    d["price_note"] = price_note(d.get("description_pl"), d.get("price_pln")) or u""
 
     district, osiedle, unknown = geo.resolve(raw.location_names)
     d["district"], d["osiedle"] = district, osiedle

@@ -179,6 +179,9 @@ def _bucket(row) -> str:
 
 def _sane(row, offer_type: str) -> bool:
     lo, hi = SANE_SQM_SALE if offer_type == "sale" else SANE_SQM_RENT
+    # цена нетто + VAT — не та же величина, что у соседей (Codex, F-003)
+    if getattr(row, "price_note", None) == "net_vat":
+        return False
     return bool(row.price_pln and row.area and row.area >= MIN_AREA
                 and lo <= row.price_pln / row.area <= hi)
 
@@ -222,7 +225,7 @@ def recompute_deal_scores(db: Session, explain_id: Optional[int] = None):
     cols = (Listing.id, Listing.price_pln, Listing.area, Listing.rooms, Listing.market,
             Listing.condition, Listing.condition_override, Listing.district,
             Listing.osiedle, Listing.osiedle_override, Listing.is_representative,
-            Listing.dedup_group, Listing.build_year, Listing.building_type)
+            Listing.dedup_group, Listing.build_year, Listing.building_type, Listing.price_note)
     rows = db.execute(select(*cols).where(Listing.offer_type == "sale",
                                           Listing.is_active.is_(True))).all()
     sane = [r for r in rows if _sane(r, "sale")]

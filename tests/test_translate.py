@@ -86,14 +86,25 @@ def test_ollama_context_comes_from_settings(monkeypatch):
     перезагружает её на каждый запрос (замер: 15-25 с против 0.0 с)."""
     sent = []
 
+    import json as _json
+
     class Resp:
+        # потоковый ответ (с 02.11.2026, см. OllamaProvider._chat)
         def raise_for_status(self):
             pass
 
-        def json(self):
-            return {"message": {"content": u"<think>…</think>Квартира"}}
+        def iter_lines(self):
+            yield _json.dumps({"message": {"content": u"<think>…</think>Квар"}})
+            yield _json.dumps({"message": {"content": u"тира"}, "done": True})
 
-    monkeypatch.setattr(translate.httpx, "post", lambda url, json=None, timeout=None: sent.append(json) or Resp())
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(translate.httpx, "stream",
+                        lambda method, url, json=None, timeout=None: sent.append(json) or Resp())
     p = translate.get_provider({"translate_provider": "ollama", "translate_ollama_model": "qwen3.5:9b-q4_K_M",
                                 "translate_ollama_num_ctx": "16384"})
     assert p.translate([u"Mieszkanie"]) == [u"Квартира"]
