@@ -403,3 +403,8 @@ def test_houses_parse_separately_from_flats():
         {"key": "area", "value": {"key": "485"}},
         {"key": "floor_select", "value": {"key": "floor_1", "label": "Jednopiętrowy"}}]}, "house_sale")
     assert x.plot_area == 485 and x.area == 104.82 and x.floor_raw is None
+    from app.normalize import normalize
+    assert normalize(r)["plot_area"] == 600
+    # цена в поле участка (живое объявление 03.11.2026) — участок не верим
+    r.plot_area = r.price
+    assert normalize(r)["plot_area"] is None
