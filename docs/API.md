@@ -46,7 +46,7 @@
 
 | Метод и путь | Параметры | Ответ |
 |---|---|---|
-| `GET /api/health` | — | `{ok: true, db: "...", version: "1.0"}` (без входа) |
+| `GET /api/health` | — | `{ok: true, db: "...", version: "1.0", started_at, pid, commit, frontend}` (без входа). `commit` — 12 знаков коммита, с которого поднят процесс; `frontend` — хэш сборки интерфейса |
 | `GET /api/me` | — | `{user, role: "admin"\|"viewer", users: [..]\|null}` |
 | `GET /api/activity` **[admin]** | `user`, `days` (14), `limit` (300), `action` | `{rows: [{at, user, action, action_uk, path, query, listing_id, listing: {title, osiedle}\|null}], per_user: {user: n}, days}` — журнал: карточки, поиски, избранное, правки, экспорт |
 | `GET /api/summary` | — | `{sale: {active, new_24h, median_sqm, median_price, removed_7d}, rent: {active, new_24h, median_rent, median_rent_sqm}, last_runs: {sale: Run, rent: Run}, scrape_running: bool, paused_until: str|null, translate: {pending_titles, pending_descriptions, done_total, provider, model}, fx: {USD: 4.0, EUR: 4.3, date: "2026-09-18"}, sources: [{source, active, last_seen}]}` |
