@@ -46,6 +46,7 @@ class RawListing:
     lat: Optional[float] = None
     lon: Optional[float] = None
     geo_radius_km: Optional[int] = None      # 0 — точная точка; см. models.Listing
+    plot_area: Optional[float] = None         # участок дома, м²
     address_raw: Optional[str] = None
     seller_type_raw: Optional[str] = None    # private | agency | developer | business:true/false
     seller_name: Optional[str] = None

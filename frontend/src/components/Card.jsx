@@ -224,8 +224,9 @@ export default function Card({ id, onClose, onOpen, geo, goTo }) {
   })))
   // группа — ценник застройщика, а не одно и то же объявление дважды
   const inv = l?.group_kind === 'investment' && (l.group_size || 1) > 1
-  const isRent = l?.offer_type === 'rent'
-  const sellerTab = isRent ? 'rent' : 'catalog'
+  const isRent = /rent$/.test(l?.offer_type || '')        // и аренда дома (house_rent)
+  const isHouse = /^house_/.test(l?.offer_type || '')
+  const sellerTab = isHouse ? 'houses' : isRent ? 'rent' : 'catalog'
 
   return (
     <div className="overlay" {...modal.overlay}>
@@ -264,7 +265,8 @@ export default function Card({ id, onClose, onOpen, geo, goTo }) {
 
             <div className="kv">
               <div><span className="k">Кімнати: </span>{roomsLabel(l.rooms)}</div>
-              <div><span className="k">Площа: </span>{fmtNum(l.area, 1)} м²</div>
+              <div><span className="k">{isHouse ? 'Площа будинку: ' : 'Площа: '}</span>{fmtNum(l.area, 1)} м²</div>
+              {isHouse && <div><span className="k">Ділянка: </span>{l.plot_area ? `${fmtNum(l.plot_area)} м²` : '—'}</div>}
               <div title={FLOOR_HINT}><span className="k">Поверх: </span>{floorText(l)} <span className="muted" style={{ cursor: 'help' }}>ⓘ</span></div>
               <div><span className="k">Рік: </span>{val(l.build_year)}</div>
               <div><span className="k">Ринок: </span>{tr('market', l.market)}</div>
@@ -367,7 +369,10 @@ export default function Card({ id, onClose, onOpen, geo, goTo }) {
               </div>
             </div>
 
-            {!isRent && (
+            {isHouse && !isRent && (
+              <p className="muted">Знижку до ринку й дохідність для будинків не рахуємо: ціна залежить від ділянки й типу забудови, і порівнювати будинок із квартирами за м² не можна.</p>
+            )}
+            {!isRent && !isHouse && (
               <div className="grid-2">
                 <div><h3>Чому така знижка</h3><DealExplain l={l} /></div>
                 <div><h3>Дохідність від оренди</h3><RentExplain l={l} /></div>

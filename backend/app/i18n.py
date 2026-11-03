@@ -22,6 +22,7 @@ BUILDING_TYPE: Dict[str, Pair] = {
     "house": (u"dom wolnostojący", u"окремий будинок"),
     "infill": (u"plomba", u"«пломба» (вбудований у забудову)"),
     "ribbon": (u"szeregowiec", u"таунхаус (рядна забудова)"),
+    "semi_detached": (u"bliźniak", u"будинок-близнюк (на дві родини)"),
     "loft": (u"loft", u"лофт"),
     "other": (u"pozostałe", u"інше"),
 }
@@ -135,6 +136,13 @@ LEVELS: Dict[str, Pair] = {
 CHARACTERISTIC_LABELS: Dict[str, Pair] = {
     # без подписи до 02.11.2026 (ключ показывался как есть, и в украинской колонке тоже)
     "winda": (u"Winda", u"Ліфт"),
+    "terrain_area": (u"Powierzchnia działki", u"Площа ділянки"),
+    # характеристики домов (карточка Otodom, 03.11.2026)
+    "floors_num": (u"Liczba pięter", u"Кількість поверхів"),
+    "garret_type": (u"Poddasze", u"Мансарда / горище"),
+    "roof_type": (u"Dach", u"Дах"),
+    "roofing": (u"Pokrycie dachu", u"Покрівля"),
+    "location": (u"Położenie", u"Розташування"),
     "pets": (u"Zwierzęta", u"Тварини"),
     "parking": (u"Parking", u"Паркування"),
     "developer_url": (u"Strona dewelopera", u"Сайт забудовника"),

@@ -49,7 +49,8 @@ PROTECTED = {"condition_override", "osiedle_override", "note", "is_favorite",
 DETAILS_ONLY = {"description_pl", "characteristics_json", "raw_json",
                 "condition", "condition_src", "price_note"}
 # причины Source.skipped — для сообщения прогона
-SKIP_LABELS = {"investment": u"инвестиций целиком", "outside": u"вне Вроцлава"}
+SKIP_LABELS = {"investment": u"инвестиций целиком", "outside": u"вне Вроцлава",
+               "other_estate": u"другого типа (дом среди квартир или наоборот)"}
 
 
 # ---------- состояние ----------

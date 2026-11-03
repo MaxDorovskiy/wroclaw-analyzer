@@ -35,7 +35,20 @@ CITY = u"Wrocław"
 OTODOM_SEARCH = {
     "sale": "https://www.otodom.pl/pl/wyniki/sprzedaz/mieszkanie/dolnoslaskie/wroclaw/wroclaw/wroclaw",
     "rent": "https://www.otodom.pl/pl/wyniki/wynajem/mieszkanie/dolnoslaskie/wroclaw/wroclaw/wroclaw",
+    # дома — решение владельца 03.11.2026 (№12): «дома да, комнаты пока нет».
+    # Живая выдача 03.11: продажа 9 страниц по 72, аренда 59 объявлений.
+    "house_sale": "https://www.otodom.pl/pl/wyniki/sprzedaz/dom/dolnoslaskie/wroclaw/wroclaw/wroclaw",
+    "house_rent": "https://www.otodom.pl/pl/wyniki/wynajem/dom/dolnoslaskie/wroclaw/wroclaw/wroclaw",
 }
+#: Типы сделки. Дома — отдельные типы, а не признак у квартиры: вся аналитика
+#: квартир (медианы, выгодность, доходность, склейка) отбирает 'sale' / 'rent',
+#: и дома в неё не попадут ни одним забытым запросом.
+KINDS = ("sale", "rent", "house_sale", "house_rent")
+HOUSE_OF = {"sale": "house_sale", "rent": "house_rent"}
+
+
+def is_rent(kind: str) -> bool:
+    return kind in ("rent", "house_rent")
 OTODOM_PAGE_SIZE = 72
 # slug на выдаче уже оканчивается на «-ID<код>» (код в URL буквенно-цифровой и
 # НЕ равен числовому id из JSON) — поэтому адрес карточки строится из slug
@@ -57,6 +70,9 @@ OLX_FRIENDLY = "https://www.olx.pl/api/v1/friendly-links/query-params/"
 OLX_PATHS = {
     "sale": "nieruchomosci,mieszkania,sprzedaz,wroclaw/",
     "rent": "nieruchomosci,mieszkania,wynajem,wroclaw/",
+    # живой API 03.11.2026: category_id 18 / 20, город тот же 19701; 144 и 27 объявлений
+    "house_sale": "nieruchomosci,domy,sprzedaz,wroclaw/",
+    "house_rent": "nieruchomosci,domy,wynajem,wroclaw/",
 }
 OLX_PAGE_SIZE = 40      # обычных объявлений на страницу; сверху API докладывает ~12 рекламных
 # Потолок выдачи: metadata.total_elements никогда не больше 1000, сколько бы
@@ -112,6 +128,9 @@ DEFAULT_SETTINGS = {
     # источники
     "olx_category_sale": "14",
     "olx_category_rent": "15",
+    "olx_category_house_sale": "18",
+    "olx_category_house_rent": "20",
+    "houses_enabled": "1",                  # дома после квартир в тех же прогонах (№12)
     "olx_city_id": "19701",
     "fetch_mode": "httpx",                   # httpx | browser
     "requests_per_minute": str(REQUESTS_PER_MINUTE),
@@ -135,6 +154,7 @@ SAFE_KEYS = {
     "translate_deepl_key", "translate_daily_cap", "translate_enabled",
     "deal_threshold_pct", "renovation_cost_sqm_pln",
     "olx_category_sale", "olx_category_rent", "olx_city_id", "fetch_mode",
+    "olx_category_house_sale", "olx_category_house_rent", "houses_enabled",
     "requests_per_minute", "sources_enabled", "details_per_run", "public_url",
     "telegram_token", "telegram_chat_id",
 }

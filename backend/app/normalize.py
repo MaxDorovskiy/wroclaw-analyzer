@@ -123,6 +123,8 @@ _BUILDING = {
     "wolnostojacy": "house",          # так пишет OLX (builttype), без «dom_»
     "infill": "infill", "plomba": "infill",
     "ribbon": "ribbon", "szeregowiec": "ribbon", "dom_szeregowy": "ribbon",
+    # дома (с 03.11.2026): Otodom пишет detached / semi_detached, OLX — «Bliźniak»
+    "detached": "house", "semi_detached": "semi_detached", "blizniak": "semi_detached",
     "loft": "loft",
     "other": "other", "pozostale": "other", "inne": "other",
 }
@@ -420,6 +422,7 @@ def normalize(raw: RawListing) -> Dict[str, Any]:
     d["street"] = (raw.street or None)
     d["lat"], d["lon"] = raw.lat, raw.lon
     d["geo_radius_km"] = raw.geo_radius_km
+    d["plot_area"] = raw.plot_area
     d["address_raw"] = raw.address_raw
     d["location_raw"] = u" | ".join(x for x in raw.location_names if x) or None
 

@@ -39,7 +39,7 @@ function Line({ l, right, onOpen, lang }) {
         {biText(lang, l.osiedle, l.osiedle_uk) || biText(lang, l.district, l.district_uk) || '—'}
         {' · '}{roomsLabel(l.rooms)} к. · {fmtNum(l.area, 0)} м²
       </span>
-      <b style={{ whiteSpace: 'nowrap' }}>{fmtPln(l.price_pln)}{l.offer_type === 'rent' ? '/міс' : ''}</b>
+      <b style={{ whiteSpace: 'nowrap' }}>{fmtPln(l.price_pln)}{/rent$/.test(l.offer_type || '') ? '/міс' : ''}</b>
       {right(l)}
     </li>
   )
@@ -125,6 +125,9 @@ export default function Dashboard({ summary, onOpen, goTo, me }) {
         )}
         <Kpi loading={waiting} label="Знято за тиждень" value={fmtNum(sale.removed_7d)}
           sub="зникли з площадок" title="Рядки не видаляються — це спостереження про ринок" />
+        <Kpi loading={waiting} label="Будинки" value={fmtNum((s.houses || {}).house_sale)}
+          sub={`на продаж; в оренду ${fmtNum((s.houses || {}).house_rent)}`}
+          onClick={() => goTo('houses', {})} title="Перейти до будинків" />
       </div>
 
       <div className="dash">

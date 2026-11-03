@@ -48,6 +48,7 @@ class Listing(Base):
 
     # --- квартира ---
     area = Column(Float, index=True)
+    plot_area = Column(Float)                # участок дома, м² (дома — с 03.11.2026)
     rooms = Column(Integer, index=True)
     floor = Column(Integer)                  # 0 = parter (польская нумерация!)
     floors_total = Column(Integer)

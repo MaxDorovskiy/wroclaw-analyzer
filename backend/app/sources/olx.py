@@ -30,8 +30,11 @@ PRICE_EDGES = {
     "sale": [0, 300000, 400000, 450000, 500000, 550000, 600000, 650000, 700000,
              800000, 900000, 1000000, 1300000, 2000000, None],
     "rent": [0, 2000, 2400, 2800, 3200, 3600, 4000, 4500, 5500, 8000, None],
+    # домов на 03.11.2026 144 и 27 — до потолка 1000 далеко, полосы на будущее
+    "house_sale": [0, 700000, 1000000, 1300000, 1600000, 2000000, 3000000, None],
+    "house_rent": [0, 4000, 6000, 8000, 12000, None],
 }
-MIN_WIDTH = {"sale": 5000, "rent": 50}
+MIN_WIDTH = {"sale": 5000, "rent": 50, "house_sale": 10000, "house_rent": 100}
 _OFFSET_RX = re.compile(r"[?&]offset=(\d+)")
 
 
@@ -99,7 +102,7 @@ class Olx(Source):
 
     # ---------- id категории и города ----------
     def resolve_ids(self, offer_type: str, fetcher, settings: Dict[str, str]) -> Tuple[int, int]:
-        cat_key = "olx_category_sale" if offer_type == "sale" else "olx_category_rent"
+        cat_key = "olx_category_%s" % offer_type
         fallback = (int(settings.get(cat_key) or 0), int(settings.get("olx_city_id") or 0))
         try:
             data = fetcher.get_json(OLX_FRIENDLY + OLX_PATHS[offer_type])
@@ -232,6 +235,7 @@ class Olx(Source):
                         "value": (v.get("key") if isinstance(v, dict) and v.get("key") is not None
                                   else (v.get("value") if isinstance(v, dict) else v)),
                         "localized": v.get("label") if isinstance(v, dict) else None}
+        house = offer_type.startswith("house")
         business = it.get("business")
         seller_raw = "business:%s" % ("true" if business else "false") if business is not None else None
         return RawListing(
@@ -243,8 +247,11 @@ class Olx(Source):
             price_per_m2=_pnum(params, "price_per_m"),
             czynsz=_pnum(params, "rent"),
             area=_pnum(params, "m"),
+            # у домов «area» — участок («Powierzchnia działki»), а floor_select —
+            # этажность дома («Jednopiętrowy»), а не этаж: живой ответ 03.11.2026
+            plot_area=_pnum(params, "area") if house else None,
             rooms_raw=_pv(params, "rooms"),
-            floor_raw=_pv(params, "floor_select"),
+            floor_raw=None if house else _pv(params, "floor_select"),
             building_type_raw=_pv(params, "builttype"),
             market_raw=_pv(params, "market"),
             furnished_raw=_pv(params, "furniture"),

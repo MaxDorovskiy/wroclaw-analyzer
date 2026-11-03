@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 
 from . import (analytics, dedup, fx, geo, i18n, presentation, questions, rent_analytics,
                scraper, translate)
-from .config import (DATA_DIR, DB_PATH, FRONTEND_DIST, SAFE_KEYS, SCAN_HOUR_RENT,
+from .config import (DATA_DIR, DB_PATH, FRONTEND_DIST, HOUSE_OF, KINDS, SAFE_KEYS, SCAN_HOUR_RENT,
                      SCAN_HOURS_SALE, SCAN_JITTER_SEC, SCAN_MINUTE_RENT, SECRET_KEYS,
                      SECRET_MASK, VERSION)
 from .db import SessionLocal, ensure_columns, get_db
@@ -267,7 +267,7 @@ def row_dict(l: Listing, ph: Optional[dict] = None, is_fav: bool = False) -> Dic
         "title_pl": l.title_pl, "title_uk": l.title_uk,
         "price_pln": l.price_pln, "price_usd": l.price_usd, "price_eur": l.price_eur,
         "price_per_m2": l.price_per_m2, "czynsz_pln": l.czynsz_pln, "hide_price": l.hide_price,
-        "area": l.area, "rooms": l.rooms, "floor": l.floor, "floor_uk": i18n.floor_uk(l.floor),
+        "area": l.area, "plot_area": l.plot_area, "rooms": l.rooms, "floor": l.floor, "floor_uk": i18n.floor_uk(l.floor),
         "floors_total": l.floors_total, "build_year": l.build_year,
         "market": l.market, "market_uk": i18n.uk("market", l.market),
         "building_type": l.building_type, "building_type_uk": i18n.uk("building_type", l.building_type),
@@ -955,6 +955,11 @@ def _summary_heavy(db: Session) -> Dict:
         "sources": [{"source": s, "active": n, "last_seen": ls} for s, n, ls in db.execute(
             select(Listing.source, func.count(), func.max(Listing.last_seen))
             .where(Listing.is_active.is_(True)).group_by(Listing.source)).all()],
+        # дома (с 03.11.2026) — только счёт: в аналитику квартир они не входят
+        "houses": {k: n for k, n in db.execute(
+            select(Listing.offer_type, func.count()).where(
+                Listing.is_active.is_(True), Listing.offer_type.in_(("house_sale", "house_rent")),
+                Listing.is_representative.is_(True)).group_by(Listing.offer_type)).all()},
     }
 
 
@@ -972,11 +977,10 @@ def api_summary(db: Session = Depends(get_db)):
     paused = scraper.paused_until(db)
     heavy = _cached("summary", lambda: _summary_heavy(db), 180, stale_ok=1800)
     return dict(heavy["market"], **{
-        "last_runs": {"sale": _run_dict(scraper.last_run(db, "sale")),
-                      "rent": _run_dict(scraper.last_run(db, "rent"))},
+        "last_runs": {k: _run_dict(scraper.last_run(db, k)) for k in KINDS},
         "scrape_running": scraper.is_running(), "current_run_id": scraper.current_run_id(),
         "paused_until": _pause_value(paused), "translate": heavy["translate"], "fx": fx.latest(db),
-        "sources": heavy["sources"], "version": VERSION,
+        "sources": heavy["sources"], "houses": heavy.get("houses") or {}, "version": VERSION,
         # число на вкладке «Питання»: без него раздел надо открывать,
         # чтобы узнать, есть ли там что-то — и в него бы не заходили
         "questions_open": questions.open_count(db),
@@ -1167,10 +1171,24 @@ def _bg(target, *args):
 
 def _scrape_bg(kind: str, sources: str):
     try:
-        scraper.run_scrape(kind, sources)
+        run_id = scraper.run_scrape(kind, sources)
     except Exception as e:  # noqa: BLE001
         log.error("прогон %s упал: %s", kind, e)
+        run_id = None
     _cache.clear()
+    # Дома — тем же прогоном сразу после квартир (решение владельца №12, 03.11.2026):
+    # своих задач Планировщика им не нужно, а это значит — и прав администратора.
+    # Только за полным прогоном квартир: остановленный или на паузе не продолжаем.
+    house = HOUSE_OF.get(kind)
+    if house and sources == "all" and run_id:
+        db = SessionLocal()
+        try:
+            ok = (get_settings(db).get("houses_enabled", "1") != "0"
+                  and (db.get(ScrapeRun, run_id).status == "done") and not scraper.paused_until(db))
+        finally:
+            db.close()
+        if ok:
+            _scrape_bg(house, sources)
 
 
 def _start_scrape(db: Session, kind: str, sources: str = "all") -> dict:
@@ -1184,8 +1202,8 @@ def _start_scrape(db: Session, kind: str, sources: str = "all") -> dict:
 
 @app.post("/api/scrape", dependencies=[Depends(require_admin)])
 def api_scrape(kind: str = "sale", source: str = "all", db: Session = Depends(get_db)):
-    if kind not in ("sale", "rent", "all"):
-        raise HTTPException(400, u"kind: sale | rent | all")
+    if kind not in KINDS + ("all",):
+        raise HTTPException(400, u"kind: %s | all" % u" | ".join(KINDS))
     if kind == "all":
         if scraper.is_running() or scraper.paused_until(db):
             raise HTTPException(409, u"прогін уже йде або пауза")

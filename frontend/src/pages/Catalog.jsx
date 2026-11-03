@@ -16,7 +16,8 @@ const NUMERIC = new Set(['page', 'per_page', 'price_min', 'price_max', 'area_min
 function fromUrl(p) {
   const out = {}
   for (const [k, v] of Object.entries(p || {})) {
-    if (k === 'id' || k === 'preset') continue   // открытая карточка и пресет «Вигідних» — не фильтры
+    // открытая карточка, пресет «Вигідних» и режим «Будинків» — не фильтры
+    if (k === 'id' || k === 'preset' || k === 'mode') continue
     // Пустые значения пропускаем: адрес приходит и из памяти раздела, где у
     // незаполненного фильтра лежит undefined, — и такой «фильтр» затирал бы
     // пресет. Так выбор «чиє обране» молча возвращался к своему списку.
@@ -49,7 +50,7 @@ const SORTS_RENT = SORTS_SALE.filter(([k]) => k !== 'discount' && k !== 'yield')
 // rent — той самий каталог для оренди: offer_type=rent, ціна = ставка/міс,
 // без знижки та дохідності.
 export default function Catalog({ onOpen, preset, urlParams, onParams, geo, rent = false,
-                                  offerType, extraSorts, toolbar, sel, onSel }) {
+                                  offerType, extraSorts, toolbar, sel, onSel, scores = !rent }) {
   const mixed = offerType === 'all'
   // Порядок важен: умолчания → пресет раздела → адрес. Адрес главнее всего,
   // иначе открытая ссылка показывала бы не то, что в ней записано.
@@ -90,11 +91,12 @@ export default function Catalog({ onOpen, preset, urlParams, onParams, geo, rent
   )
   const exportParams = toApiParams(f, rent, offerType)
   const sorts = [...(extraSorts || []), ...(rent ? SORTS_RENT : SORTS_SALE)]
+    .filter(([k]) => scores || (k !== 'discount' && k !== 'yield'))
 
   return (
     <>
       {toolbar}
-      <Filters value={f} onChange={setF} geo={geo} rent={rent} />
+      <Filters value={f} onChange={setF} geo={geo} rent={rent} scores={scores} />
       <div className="panel">
         <div className="row" style={{ marginBottom: 8 }}>
           <h3 style={{ margin: 0 }}>
@@ -120,7 +122,7 @@ export default function Catalog({ onOpen, preset, urlParams, onParams, geo, rent
             мгновенно, а строки приходят с сервера — без этого на экране стоит
             СТАРЫЙ порядок под новой стрелкой (киевские грабли 06.09.2026) */}
         <div className="wrap" style={{ opacity: loading ? 0.45 : 1, transition: 'opacity .15s' }}>
-          <ListingsTable items={data.items} onOpen={onOpen} rent={rent} mixed={mixed}
+          <ListingsTable items={data.items} onOpen={onOpen} rent={rent} mixed={mixed} scores={scores}
             sel={sel} onSel={onSel} sort={f.sort} order={f.order} loading={loading}
             onSort={(s, o) => setF({ ...f, sort: s, order: o, page: 1 })} />
         </div>

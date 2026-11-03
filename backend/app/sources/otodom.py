@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from .. import geo
-from ..config import OTODOM_AD_URL, OTODOM_CITY_ID, OTODOM_PAGE_SIZE, OTODOM_SEARCH
+from ..config import OTODOM_AD_URL, OTODOM_CITY_ID, OTODOM_PAGE_SIZE, OTODOM_SEARCH, is_rent
 from ..tz import WARSAW
 from .base import Page, RawListing, Source, parse_dt
 
@@ -235,8 +235,13 @@ class Otodom(Source):
         # квартиры идут в той же выдаче отдельными FLAT с developmentId; сама инвестиция —
         # отдельная сущность (DEFERRED §5), в каталоге квартир она была бы пустой строкой
         # и зря тратила бы карточку в хвосте.
-        if (it.get("estate") or "FLAT") != "FLAT":
+        estate = it.get("estate") or "FLAT"
+        if estate == "INVESTMENT":
             self.skipped["investment"] = self.skipped.get("investment", 0) + 1
+            return None
+        # в выдаче домов — HOUSE, квартир — FLAT; чужой тип не берём (03.11.2026)
+        if estate != ("HOUSE" if offer_type.startswith("house") else "FLAT"):
+            self.skipped["other_estate"] = self.skipped.get("other_estate", 0) + 1
             return None
         if outside_city(it.get("location")):
             self.skipped["outside"] = self.skipped.get("outside", 0) + 1
@@ -264,9 +269,10 @@ class Otodom(Source):
             # у аренды rentPrice — это czynsz «dodatkowo», у продажи его нет. 0 = поле не
             # заполнено (в живой выдаче аренды: null — 16 из 73, value=0 — 4): «0 zł» в
             # карточке читалось бы как «платежей нет», а это неизвестно
-            czynsz=(_val(it.get("rentPrice")) or None) if offer_type == "rent" else None,
+            czynsz=(_val(it.get("rentPrice")) or None) if is_rent(offer_type) else None,
             hide_price=bool(it.get("hidePrice")),
             area=_val(it.get("areaInSquareMeters")),
+            plot_area=_val(it.get("terrainAreaInSquareMeters")),
             rooms_raw=it.get("roomsNumber"),
             floor_raw=it.get("floorNumber"),
             location_names=_loc_names(loc),
@@ -334,6 +340,9 @@ class Otodom(Source):
         rent = _val(cv("rent", "Rent"))
         if rent:                       # 0 — «не заполнено», см. parse_item
             raw.czynsz = rent
+        plot = _val(cv("terrain_area", "Terrain_area"))
+        if plot:                       # участок у дома (в выдаче — terrainAreaInSquareMeters)
+            raw.plot_area = plot
         raw.extras = _listify(cv("extras_types", "Extras_types")) + _listify(cv("equipment_types", "Equipment_types"))
         raw.media = _listify(cv("media_types", "Media_types"))
         raw.security = _listify(cv("security_types", "Security_types"))

@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard.jsx'
 import Questions from './pages/Questions.jsx'
 import Deals from './pages/Deals.jsx'
 import Rent from './pages/Rent.jsx'
+import Houses from './pages/Houses.jsx'
 import Contacts from './pages/Contacts.jsx'
 import Favorites from './pages/Favorites.jsx'
 import Stats from './pages/Stats.jsx'
@@ -23,6 +24,7 @@ const TABS = [
   ['catalog', 'Каталог'],
   ['deals', 'Вигідні'],
   ['rent', 'Оренда'],
+  ['houses', 'Будинки'],
   ['favorites', '★ Обране'],
   ['contacts', 'Контакти'],
   ['stats', 'Статистика'],
@@ -171,7 +173,7 @@ export default function App() {
   useEffect(() => { api.profile().then(setProfile).catch(() => setProfile(null)) }, [])
 
   const Page = {
-    home: Dashboard, catalog: Catalog, deals: Deals, rent: Rent, favorites: Favorites, contacts: Contacts,
+    home: Dashboard, catalog: Catalog, deals: Deals, rent: Rent, houses: Houses, favorites: Favorites, contacts: Contacts,
     stats: Stats, runs: Runs, journal: Journal, questions: Questions, settings: Settings,
   }[tab]
   const isViewer = me?.role === 'viewer'

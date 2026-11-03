@@ -66,8 +66,9 @@ function GeoCell({ l }) {
 // виглядала б як ціна продажу.
 // Классы c-opt / c-opt2 — приоритет колонки: на планшете прячется первый
 // уровень, на телефоне — второй. 14 колонок на узком экране нечитаемы.
+// scores — колонки знижки й дохідності; у будинків їх немає (рахуємо лише квартири).
 export default function ListingsTable({ items, onOpen, rent = false, mixed = false, sort, order, onSort,
-                                        sel, onSel, loading = false }) {
+                                        sel, onSel, loading = false, scores = !rent }) {
   const [flash, toast] = useFlash()
   const picked = new Set(sel || [])
   const pageIds = (items || []).map(x => x.id)
@@ -92,7 +93,7 @@ export default function ListingsTable({ items, onOpen, rent = false, mixed = fal
       </th>
     )
   }
-  const cols = (rent ? 12 : 14) + (onSel ? 1 : 0)
+  const cols = (scores ? 14 : 12) + (onSel ? 1 : 0)
 
   return (
     <>
@@ -114,8 +115,8 @@ export default function ListingsTable({ items, onOpen, rent = false, mixed = fal
           <Th field="area" num>м²</Th>
           <Th field="price" num>{rent ? 'Ставка' : 'Ціна'}</Th>
           <Th field="price_sqm" num>zł/м²</Th>
-          {!rent && <Th field="discount" num title="Знижка до медіани zł/м² схожих квартир">Знижка</Th>}
-          {!rent && <Th field="yield" num title="Валова дохідність від оренди, % річних" cls="c-opt">Дохідність</Th>}
+          {scores && <Th field="discount" num title="Знижка до медіани zł/м² схожих квартир">Знижка</Th>}
+          {scores && <Th field="yield" num title="Валова дохідність від оренди, % річних" cls="c-opt">Дохідність</Th>}
           <th className="c-opt">Продавець</th>
           <th className="c-opt2">Джерело</th>
           <Th field="first_seen" num title="Днів у продажу (з першої появи в базі)" cls="c-opt2">Днів</Th>
@@ -125,7 +126,7 @@ export default function ListingsTable({ items, onOpen, rent = false, mixed = fal
       </thead>
       <tbody>
         {(items || []).map(l => {
-          const rowRent = mixed ? l.offer_type === 'rent' : rent
+          const rowRent = mixed ? /rent$/.test(l.offer_type || '') : rent
           return (
           <tr key={l.id} className="clickable" tabIndex={0}
             onClick={() => onOpen(l.id)}
@@ -180,7 +181,7 @@ export default function ListingsTable({ items, onOpen, rent = false, mixed = fal
                 : <div className="cell-sub" title="За курсом НБП на день останнього перегляду">{fmtUsd(l.price_usd)}</div>}
             </td>
             <td className="num">{fmtNum(l.price_per_m2)}</td>
-            {!rent && (
+            {scores && (
               <td className="num">
                 {l.discount_pct != null && l.discount_pct >= 3
                   ? <span className={'badge ' + (l.deal_thin_base ? 'gray' : 'deal')} title={dealTitle(l)}>
@@ -194,7 +195,7 @@ export default function ListingsTable({ items, onOpen, rent = false, mixed = fal
                     </span>}
               </td>
             )}
-            {!rent && (
+            {scores && (
               <td className="num c-opt">
                 {l.yield_pct != null
                   ? <>

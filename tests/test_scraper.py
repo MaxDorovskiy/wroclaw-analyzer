@@ -380,3 +380,26 @@ def test_numeric_key_does_not_glue_different_buildings(clean_db):
     assert c1.dedup_group == c2.dedup_group
     assert d1.dedup_group == d2.dedup_group
     assert res["refused"] >= 1
+
+
+def test_houses_parse_separately_from_flats():
+    """Дома (№12, 03.11.2026) — свои типы сделки: в выдаче домов берём HOUSE, в
+    выдаче квартир HOUSE не берём; у OLX «area» дома — участок, а floor_select —
+    этажность дома, не этаж квартиры (живой ответ 03.11.2026)."""
+    from app.sources.otodom import Otodom
+    from app.sources.olx import Olx
+    o = Otodom()
+    it = {"id": 1, "estate": "HOUSE", "slug": "dom-ID1", "title": "Dom", "totalPrice": {"value": 1500000},
+          "areaInSquareMeters": 150, "terrainAreaInSquareMeters": 600, "roomsNumber": "FIVE",
+          "location": {}}
+    r = o.parse_item(it, "house_sale")
+    assert r is not None and r.offer_type == "house_sale" and r.plot_area == 600
+    assert o.parse_item(it, "sale") is None and o.skipped["other_estate"] == 1
+    flat = dict(it, estate="FLAT")
+    assert o.parse_item(flat, "house_sale") is None
+    x = Olx().parse_item({"id": 5, "url": "https://www.olx.pl/d/oferta/dom", "title": "Dom", "params": [
+        {"key": "price", "value": {"value": 799000, "currency": "PLN"}},
+        {"key": "m", "value": {"key": "104.82"}},
+        {"key": "area", "value": {"key": "485"}},
+        {"key": "floor_select", "value": {"key": "floor_1", "label": "Jednopiętrowy"}}]}, "house_sale")
+    assert x.plot_area == 485 and x.area == 104.82 and x.floor_raw is None

@@ -67,7 +67,7 @@ export const T = {
     city: 'місту',
   },
   runStatus: { running: 'іде', done: 'завершено', failed: 'збій', stopped: 'зупинено' },
-  runKind: { sale: 'продаж', rent: 'оренда', all: 'усе' },
+  runKind: { sale: 'продаж', rent: 'оренда', house_sale: 'будинки: продаж', house_rent: 'будинки: оренда', all: 'усе' },
   provider: {
     ollama: 'Ollama (локальна модель)',
     anthropic: 'Anthropic (Claude)',
@@ -178,7 +178,8 @@ const list = (v) => String(v).split(',').filter(Boolean).join('/')
 // осиедле Gaj». Ключи — параметры /api/listings и /api/contacts; незнакомый
 // ключ остаётся как есть, чтобы новый фильтр не пропал из журнала молча.
 const Q = {
-  offer_type: v => v === 'rent' ? 'оренда' : v === 'sale' ? 'продаж' : v === 'all' ? 'продаж + оренда' : `тип ${v}`,
+  offer_type: v => ({ rent: 'оренда', sale: 'продаж', all: 'продаж + оренда', house_sale: 'будинки, продаж',
+    house_rent: 'будинки, оренда' })[v] || `тип ${v}`,
   rooms: v => `${collapseRooms(v)} кімн.`,
   price_min: v => `ціна від ${fmtNum(v)}`, price_max: v => `ціна до ${fmtNum(v)}`,
   area_min: v => `від ${v} м²`, area_max: v => `до ${v} м²`,

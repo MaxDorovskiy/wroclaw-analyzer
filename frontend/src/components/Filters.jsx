@@ -41,7 +41,7 @@ function Chk({ value, onChange, name, label, title }) {
 
 // rent — фильтры каталога оренди: ціна там ставка на місяць, а знижки та
 // дохідності немає (їх рахуємо тільки для продажу).
-export default function Filters({ value, onChange, geo, rent = false }) {
+export default function Filters({ value, onChange, geo, rent = false, scores = !rent }) {
   const { lang } = useLang()
   const set = (k, v) => onChange({ ...value, [k]: v, page: 1 })
 
@@ -137,7 +137,7 @@ export default function Filters({ value, onChange, geo, rent = false }) {
         title="Рік будівлі" />
       <Range value={value} onChange={set} prefix="floor" label="поверх" width={50}
         title="Поверх. Нумерація польська: партер (0) = наш 1-й поверх" />
-      {!rent && (
+      {scores && (
         <select value={value.discount_min ?? ''} title="Знижка до медіани zł/м² схожих квартир"
           onChange={e => set('discount_min', e.target.value === '' ? null : +e.target.value)}>
           <option value="">Знижка: будь-яка</option>
@@ -147,7 +147,7 @@ export default function Filters({ value, onChange, geo, rent = false }) {
           <option value="20">≥ 20%</option>
         </select>
       )}
-      {!rent && (
+      {scores && (
         <select value={value.yield_min ?? ''}
           title="Валова дохідність від оренди: очікувана ставка × 12 / вкладення. Без оголошень оренди поруч цифри немає"
           onChange={e => set('yield_min', e.target.value === '' ? null : +e.target.value)}>

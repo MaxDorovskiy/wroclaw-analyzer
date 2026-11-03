@@ -102,7 +102,7 @@ def _short(text: Optional[str]) -> str:
 
 def _item_html(l, lang: str, t: Dict[str, str], i: int, total: int) -> str:
     from . import geo, i18n
-    is_rent = l.offer_type == "rent"
+    is_rent = l.offer_type in ("rent", "house_rent")
     uk = lang == "uk"
     title = (l.title_uk or l.title_pl) if uk else (l.title_pl or l.title_uk)
     desc = (l.description_uk or l.description_pl) if uk else (l.description_pl or l.description_uk)
