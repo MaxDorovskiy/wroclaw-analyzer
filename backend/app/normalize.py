@@ -245,8 +245,30 @@ def _says(rx, text: str) -> bool:
     return False
 
 
-_RX_NET_SAID = re.compile(u"(?i)cen\\w*\\s+(jest\\s+)?(cen\\w*\\s+)?netto\\s*(\\+|plus)\\s*(\\d{1,2}\\s*%\\s*)?vat")
-_RX_NET_SUM = re.compile(u"(?i)(\\d[\\d\\s\\u00a0.]*(?:,\\d{1,2})?)\\s*(zł|pln)\\s*netto\\s*(\\+|plus)")
+_RX_NET_SAID = re.compile(u"(?i)cen\\w*\\s+(jest\\s+)?(cen\\w*\\s+)?netto\\s*\\(?\\s*(\\+|plus)\\s*(\\d{1,2}\\s*%\\s*)?vat")
+# Формулировки, которые первая фраза не брала (F-003 Codex 03.11.2026, живые ID):
+# «Cena podana w ogłoszeniu jest wartością netto i należy ją powiększyć o 23% VAT»
+# (5286), «… i będzie powiększona o 23%VAT» (4448, 3039)
+_RX_NET_VALUE = re.compile(u"(?i)cen\\w*(\\s+\\w+){0,4}?\\s+(jest\\s+)?(wartości?ą|kwotą)\\s+netto\\b[^.]{0,60}?(vat|powiększ)")
+# «Do ceny należy doliczyć podatek VAT w wysokości 23%» (5286, 3039)
+_RX_ADD_VAT = re.compile(u"(?i)do\\s+(podanej\\s+)?ceny\\s+(należy\\s+)?(doliczyć|dodać|doliczamy|dochodzi)\\s+(podatek\\s+)?vat")
+# Сумма, равная цене объекта: «320 000 zł Netto (+ VAT 23%)» (36388) и «269 900 zł netto
+# (331 977zł brutto)» (34010). После «netto plus» — именно VAT: «1200,00 zł netto plus
+# liczniki» (аренда 35287) — это счётчики, VAT в описании нет
+_RX_NET_SUM = re.compile(u"(?i)(\\d[\\d\\s\\u00a0.]*(?:,\\d{1,2})?)\\s*,?-?\\s*(zł|pln)\\s*netto\\s*"
+                         u"(\\(?\\s*(\\+|plus)\\s*(\\d{1,2}\\s*%\\s*)?vat|\\(\\s*\\d[\\d\\s\\u00a0.,]*(zł|pln)?\\s*brutto)")
+# Нетто — про отдельную вещь, а не про квартиру: «cena garażu jest ceną netto plus VAT»
+# при брутто-цене квартиры (контрпример Codex). Смотрим только своё предложение:
+# «…z wyposażeniem apartamentu. Do ceny należy doliczyć VAT» — VAT про апартамент.
+# «Opłat…» сюда не входит: «Opłata za wynajem: 3.800 zł Netto + 23% VAT» (12261) — это
+# и есть арендная плата
+_RX_OTHER_ITEM = re.compile(u"(?i)(garaż|parking|miejsc\\w*\\s+postojow|postojow|komór\\w*\\s+lokator|piwnic"
+                            u"|prowizj|wynagrodzeni)")
+
+
+def _about_flat(text: str, start: int) -> bool:
+    sentence = re.split(u"[.!?\\n]", text[max(0, start - 120):start])[-1]
+    return not _RX_OTHER_ITEM.search(sentence)
 
 
 def price_note(description: Optional[str], price: Optional[float]) -> Optional[str]:
@@ -262,9 +284,13 @@ def price_note(description: Optional[str], price: Optional[float]) -> Optional[s
     text = description or u""
     if not text or not price:
         return None
-    if _RX_NET_SAID.search(text):
-        return "net_vat"
+    for rx in (_RX_NET_SAID, _RX_NET_VALUE, _RX_ADD_VAT):
+        for m in rx.finditer(text):
+            if _about_flat(text, m.start()):
+                return "net_vat"
     for m in _RX_NET_SUM.finditer(text):
+        if not _about_flat(text, m.start()):
+            continue
         digits = re.sub(u"[\\s\\u00a0.]", u"", m.group(1)).replace(u",", u".")
         try:
             amount = float(digits)

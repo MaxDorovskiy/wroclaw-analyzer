@@ -118,6 +118,22 @@ def test_net_price_plus_vat_is_flagged_only_when_the_price_is_net():
     assert price_note(u"miejsce parkingowe w cenie 8 130,08 zł netto + 23%VAT razem 10 000 zł brutto", 630228.0) is None
     assert price_note(u"W pobliżu sklep Netto i Biedronka", 500000.0) is None
     assert price_note(u"przychód 8 000 zł netto miesięcznie", 8000.0) is None
+    # F-003 Codex 03.11.2026 — формулировки живых объявлений, которые первая версия пропускала
+    for text, price in (
+            (u"Cena podana w ogłoszeniu jest wartością netto i należy ją powiększyć o 23% VAT.", 275972.0),
+            (u"Cena podana w ogłoszeniu jest wartością netto i będzie powiększona o 23%VAT", 330403.0),
+            (u"z wyposażeniem apartamentu. Do ceny należy doliczyć podatek VAT w wysokości 23%", 369931.0),
+            (u"Cena: 320 000 zł Netto (+ VAT 23%)  POLECAM!!!", 320000.0),
+            (u"za cenę 269 900 zł netto (331 977zł brutto).", 269900.0),
+            (u"Opłata za wynajem apartamentu: 3.800 zł Netto + 23% VAT", 3800.0)):
+        assert price_note(text, price) == "net_vat", text
+    # и контрпримеры: после «netto plus» не VAT; нетто — у гаража или комиссии, не у квартиры
+    for text, price in (
+            (u"Opłaty: 1200,00 zł netto plus liczniki", 1200.0),
+            (u"Oczekiwany czynsz najmu 30 000 zł netto plus opłaty eksploatacyjne.", 30000.0),
+            (u"Cena mieszkania 500 000 zł brutto. Cena garażu jest ceną netto plus VAT.", 500000.0),
+            (u"Cena 500 000 zł zawiera VAT. Prowizja 2% netto + VAT.", 500000.0)):
+        assert price_note(text, price) is None, text
 
 
 def test_ollama_stream_yields_gpu_mid_answer(monkeypatch):
