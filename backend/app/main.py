@@ -775,9 +775,12 @@ def api_translate_one(request: Request, lid: int, db: Session = Depends(get_db))
     if gpu is not None and not gpu.wait_turn(priority=translate.GPU_PRIORITY_ASK, max_wait=60):
         raise HTTPException(503, u"відеокарта зайнята: %s" % gpu.can_run(translate.GPU_PRIORITY_ASK)[1])
     try:
-        # перевод прежней версии подсказки кнопка обновляет: иначе устаревшее не освежить
-        stale = l.translate_version != translate.PROMPT_VERSION
-        res = translate.translate_listing(db, l, provider, force=(not l.description_uk) or stale)
+        with _busy_as(u"переклад картки"):
+            # перевод прежней версии подсказки кнопка обновляет: иначе устаревшее не освежить
+            stale = l.translate_version != translate.PROMPT_VERSION
+            res = translate.translate_listing(db, l, provider, force=(not l.description_uk) or stale)
+    except _Closing:
+        raise HTTPException(503, u"сервер перезапускається — спробуйте за хвилину")
     except Exception as e:  # noqa: BLE001
         db.rollback()
         raise HTTPException(502, u"перекладач не відповів: %s" % e)
@@ -806,7 +809,7 @@ def api_manual(request: Request, lid: int, body: dict, db: Session = Depends(get
     _log_action(db, lid, "manual", body, request)
     db.commit()
     if "osiedle" in body or "condition" in body:
-        _schedule_rescore()
+        _schedule_rescore(mark=True)
     return full_dict(db, l, current_user(request))
 
 
@@ -817,7 +820,7 @@ def api_detach(request: Request, lid: int, db: Session = Depends(get_db)):
         raise HTTPException(404)
     _log_action(db, lid, "detach", {}, request)
     db.commit()
-    _schedule_rescore()
+    _schedule_rescore(mark=True)
     return {"dedup_group": g}
 
 
@@ -827,7 +830,12 @@ def api_detach(request: Request, lid: int, db: Session = Depends(get_db)):
 # Пересчёт — фоном и одним на серию правок: 20 с задержки собирают несколько
 # сохранений подряд; сам пересчёт ~20 с на всю продажу.
 RESCORE_DELAY_S = 20
-_rescore = {"timer": None}
+RESCORE_RETRY_S = 300
+RESCORE_TRIES = 3
+# Признак в настройках, а не в памяти: перезапуск между правкой и пересчётом
+# иначе терял его, и скидка ждала следующего прогона (F-002 Codex 03.11.2026)
+RESCORE_FLAG = "rescore_pending"
+_rescore = {"timer": None, "fails": 0}
 _rescore_guard = threading.Lock()
 
 
@@ -837,24 +845,41 @@ def _rescore_now():
     if scraper.is_running():
         # прогон держит базу; его собственный пересчёт мог пройти до правки —
         # повторяем после него
-        _schedule_rescore(300)
+        _schedule_rescore(RESCORE_RETRY_S)
         return
-    db = SessionLocal()
     try:
-        analytics.recompute_deal_scores(db)
-        rent_analytics.recompute_yields(db)
-        log.info("пересчёт после ручной правки — готово")
-    except Exception as e:  # noqa: BLE001
-        db.rollback()
-        log.error("пересчёт после ручной правки: %s", e)
-    finally:
-        db.close()
-        _cache.clear()
+        with _busy_as(u"перерахунок"):
+            db = SessionLocal()
+            try:
+                analytics.recompute_deal_scores(db)
+                rent_analytics.recompute_yields(db)
+                set_setting(db, RESCORE_FLAG, "")
+                _rescore["fails"] = 0
+                log.info("пересчёт после ручной правки — готово")
+            except Exception as e:  # noqa: BLE001
+                db.rollback()
+                _rescore["fails"] += 1
+                log.error("пересчёт после ручной правки (%d/%d): %s", _rescore["fails"], RESCORE_TRIES, e)
+                if _rescore["fails"] < RESCORE_TRIES:
+                    _schedule_rescore(RESCORE_RETRY_S)
+                else:
+                    _rescore["fails"] = 0    # признак остаётся — догонит следующий старт
+            finally:
+                db.close()
+                _cache.clear()
+    except _Closing:
+        pass                             # признак в базе — новый процесс пересчитает
 
 
-def _schedule_rescore(delay: float = RESCORE_DELAY_S):
+def _schedule_rescore(delay: float = RESCORE_DELAY_S, mark: bool = False):
     if os.environ.get("WRO_RESCORE") == "off":   # тесты: таймер пережил бы свой тест
         return
+    if mark:
+        db = SessionLocal()
+        try:
+            set_setting(db, RESCORE_FLAG, datetime.utcnow().isoformat())
+        finally:
+            db.close()
     with _rescore_guard:
         if _rescore["timer"] is None:
             t = threading.Timer(delay, _rescore_now)
@@ -1169,6 +1194,36 @@ def _bg(target, *args):
     return t
 
 
+# Короткая фоновая работа, которую перезапуск не должен оборвать на середине:
+# пересчёт после ручной правки, ручной перевод карточки, копия базы. Прогон и
+# очередь перевода закрываются своими воротами (scraper/translate.close_gate).
+class _Closing(Exception):
+    pass
+
+
+_busy_lock = threading.Lock()
+_busy: Dict[str, int] = {}
+_closing = {"on": False}
+
+
+class _busy_as(object):
+    def __init__(self, name: str):
+        self.name = name
+
+    def __enter__(self):
+        with _busy_lock:
+            if _closing["on"]:
+                raise _Closing()
+            _busy[self.name] = _busy.get(self.name, 0) + 1
+
+    def __exit__(self, *exc):
+        with _busy_lock:
+            _busy[self.name] -= 1
+            if not _busy[self.name]:
+                del _busy[self.name]
+        return False
+
+
 # Прогон, в котором ни один источник не ответил из-за СЕТИ (а не блока), повторяем
 # через 30 минут, до трёх раз. Иначе потерянный прогон ждал следующего окна:
 # 02.11.2026 DNS роутера сбоил, и продажа в 11:00 и 17:00 не собралась вовсе, хотя
@@ -1244,6 +1299,8 @@ def _scrape_bg(kind: str, sources: str):
 def _start_scrape(db: Session, kind: str, sources: str = "all") -> dict:
     if scraper.is_running():
         raise HTTPException(409, u"прогін уже йде")
+    if scraper.closing():
+        raise HTTPException(409, u"сервер перезапускається — спробуйте за хвилину")
     if scraper.paused_until(db):
         raise HTTPException(409, u"скрапінг на паузі")
     _bg(_scrape_bg, kind, sources)
@@ -1255,8 +1312,8 @@ def api_scrape(kind: str = "sale", source: str = "all", db: Session = Depends(ge
     if kind not in KINDS + ("all",):
         raise HTTPException(400, u"kind: %s | all" % u" | ".join(KINDS))
     if kind == "all":
-        if scraper.is_running() or scraper.paused_until(db):
-            raise HTTPException(409, u"прогін уже йде або пауза")
+        if scraper.is_running() or scraper.closing() or scraper.paused_until(db):
+            raise HTTPException(409, u"прогін уже йде, пауза або перезапуск")
 
         def both():
             _scrape_bg("sale", source)
@@ -1294,12 +1351,16 @@ def api_scrape_resume(db: Session = Depends(get_db)):
 
 
 def _recompute_bg():
-    db = SessionLocal()
     try:
-        log.info("пересчёт: %s", scraper.post_process(db, None))
-    finally:
-        db.close()
-        _cache.clear()
+        with _busy_as(u"перерахунок"):
+            db = SessionLocal()
+            try:
+                log.info("пересчёт: %s", scraper.post_process(db, None))
+            finally:
+                db.close()
+                _cache.clear()
+    except _Closing:
+        log.warning("пересчёт не начат: сервер перезапускается")
 
 
 @app.post("/api/admin/restart", dependencies=[Depends(require_admin)])
@@ -1312,18 +1373,56 @@ def api_admin_restart():
     надзиратель: вышел uvicorn — через 5 с поднимет новый, уже с новым кодом.
     Поэтому процесс выходит сам. Только между прогонами и не во время перевода
     (заявка на видеокарту осталась бы висеть). Логины из env.ps1 так НЕ
-    перечитываются — для них по-прежнему safe_restart.ps1."""
-    if scraper.is_running():
-        raise HTTPException(409, u"іде прогін — перезапуск після нього")
-    if translate._state.get("running"):
-        raise HTTPException(409, u"іде переклад — перезапуск після нього")
+    перечитываются — для них по-прежнему safe_restart.ps1.
+
+    Сначала закрываем ворота, потом смотрим, не занято ли: прогон, принятый в
+    те 1,5 с, что ответ уходит клиенту, иначе обрывался на старте (F-010 Codex
+    03.11.2026, воспроизведено подменой os._exit)."""
+    why = _close_for_restart()
+    if why:
+        raise HTTPException(409, u"%s — перезапуск після нього" % why)
 
     def _exit_soon():
         time.sleep(1.5)                  # дать ответу уйти клиенту
+        why = _busy_now()                # за воротами начаться ничего не могло — страховка
+        if why:
+            _reopen_after_restart()
+            log.error("перезапуск отменён: %s", why)
+            return
         log.warning("перезапуск по /api/admin/restart: процесс выходит, server.ps1 поднимет новый")
         os._exit(0)
     _bg(_exit_soon)
     return {"restarting": True, "pid": os.getpid(), "started_at": STARTED_AT}
+
+
+def _busy_now() -> str:
+    if scraper.is_running():
+        return u"іде прогін"
+    if translate._state.get("running"):
+        return u"іде переклад"
+    with _busy_lock:
+        if _busy:
+            return u"іде " + u", ".join(sorted(_busy))
+    return u""
+
+
+def _close_for_restart() -> str:
+    """Закрыть приём новой работы. Занято — открыть обратно и сказать чем."""
+    with _busy_lock:
+        _closing["on"] = True
+    scraper.close_gate(True)
+    translate.close_gate(True)
+    why = _busy_now()
+    if why:
+        _reopen_after_restart()
+    return why
+
+
+def _reopen_after_restart():
+    with _busy_lock:
+        _closing["on"] = False
+    scraper.close_gate(False)
+    translate.close_gate(False)
 
 
 @app.post("/api/recompute", dependencies=[Depends(require_admin)])
@@ -1518,11 +1617,12 @@ def _backup_db():
         dest = out_dir / ("wro-%s.db" % datetime.now(KYIV).strftime("%Y-%m-%d"))
         if dest.exists():
             return                           # сегодня уже делали
-        db = SessionLocal()
-        try:
-            db.execute(text("VACUUM INTO :p"), {"p": str(dest).replace("\\", "/")})
-        finally:
-            db.close()
+        with _busy_as(u"копія бази"):     # оборванный VACUUM INTO оставил бы огрызок вместо копии
+            db = SessionLocal()
+            try:
+                db.execute(text("VACUUM INTO :p"), {"p": str(dest).replace("\\", "/")})
+            finally:
+                db.close()
         old_files = sorted(out_dir.glob("wro-*.db"))[:-3]
         for f in old_files:
             f.unlink()
@@ -1626,6 +1726,9 @@ def _startup():
         # модель; если он отстанет от настройки, мы либо не сможем уступить по-честному,
         # либо тронем чужую. Реестр не ответил — не повод не стартовать.
         translate.gpu_register(get_settings(db))
+        if get_settings(db).get(RESCORE_FLAG):
+            log.info("пересчёт после ручной правки не завершён прошлым процессом — повторяю")
+            _schedule_rescore(60)
     finally:
         db.close()
     # Сторож живёт ВСЕГДА: он не скрапит, а закрывает зависшие строки. Раньше он

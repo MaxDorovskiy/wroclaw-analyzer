@@ -477,6 +477,13 @@ class _Claim:
         return False
 
 
+def close_gate(on: bool) -> bool:
+    """То же, что scraper.close_gate, для очереди перевода. True — перевод идёт."""
+    with _state["lock"]:
+        _state["closing"] = on
+        return _state["running"]
+
+
 def translate_pending(db: Session, limit: Optional[int] = None,
                       stop_check: Optional[Callable[[], bool]] = None, manual: bool = False) -> str:
     """Очередь: заголовки всех новых (короткие), потом описания в пределах
@@ -500,6 +507,8 @@ def translate_pending(db: Session, limit: Optional[int] = None,
     with _state["lock"]:
         if _state["running"]:
             return u"уже идёт"
+        if _state.get("closing"):
+            return u"сервер перезапускается"
         _state["running"] = True
     try:
         cap = int(float(settings.get("translate_daily_cap") or 800))

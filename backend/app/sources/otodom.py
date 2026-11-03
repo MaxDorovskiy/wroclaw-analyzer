@@ -71,6 +71,14 @@ def _is_ad_item(x: Any) -> bool:
             and any(k in x for k in ("areaInSquareMeters", "totalPrice", "pricePerSquareMeter", "roomsNumber")))
 
 
+def _dig(obj: Any, *keys: str) -> Any:
+    for k in keys:
+        if not isinstance(obj, dict):
+            return None
+        obj = obj.get(k)
+    return obj
+
+
 def find_search_block(data: dict) -> Tuple[List[dict], dict]:
     try:
         block = data["props"]["pageProps"]["data"]["searchAds"]
@@ -215,6 +223,11 @@ class Otodom(Source):
                 fetcher.dump("otodom_%s_page%d.html" % (offer_type, page), html)
             data = extract_next_data(html)
             items, pagination = find_search_block(data)
+            # Пусто И без searchAds — это не «объявлений нет», а другая страница:
+            # без проверки прогон считал обход полным и снимал всё старше 3 дней
+            # (F-012 Codex 03.11.2026, воспроизведено на подставной выдаче)
+            if not items and not isinstance(_dig(data, "props", "pageProps", "data", "searchAds"), dict):
+                raise ValueError(u"выдача Otodom не распознана: нет searchAds (страница %d)" % page)
             total_pages = 0
             try:
                 total_pages = int(pagination.get("totalPages") or 0)

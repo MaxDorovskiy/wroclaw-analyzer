@@ -32,7 +32,8 @@ from .sources import REGISTRY, RawListing, get_source
 
 log = logging.getLogger("scraper")
 
-_state = {"running": False, "run_id": None, "stop": False, "kind": None, "lock": threading.Lock()}
+_state = {"running": False, "run_id": None, "stop": False, "kind": None, "closing": False,
+          "lock": threading.Lock()}
 PAUSE_FOREVER = "9999-12-31T00:00:00"
 
 # поля, которые прогон НЕ перетирает: ручные правки владельца и производные
@@ -60,6 +61,20 @@ def is_running() -> bool:
 
 def current_run_id() -> Optional[int]:
     return _state["run_id"]
+
+
+def close_gate(on: bool) -> bool:
+    """Перезапуск сервера: перестать (или снова начать) принимать прогоны.
+    Под тем же замком, что и старт прогона, — иначе прогон, принятый между
+    проверкой и выходом процесса, обрывался (F-010 Codex 03.11.2026).
+    True — прогон уже идёт."""
+    with _state["lock"]:
+        _state["closing"] = on
+        return _state["running"]
+
+
+def closing() -> bool:
+    return _state["closing"]
 
 
 def request_stop():
@@ -314,6 +329,14 @@ def _scrape_details(db: Session, run: ScrapeRun, src, kind: str, fetcher, settin
                 raise StopRequested()
 
 
+EMPTY_PASS_MIN_ACTIVE = 20
+
+
+def _active_count(db: Session, source: str, kind: str) -> int:
+    return db.execute(select(func.count()).select_from(Listing).where(
+        Listing.source == source, Listing.offer_type == kind, Listing.is_active.is_(True))).scalar() or 0
+
+
 def mark_removed(db: Session, kind: str, source: str, now: datetime) -> int:
     """Снятие — только после ПОЛНОГО обхода источника; строки не удаляются."""
     limit = now - timedelta(days=INACTIVE_AFTER_DAYS)
@@ -392,6 +415,8 @@ def run_scrape(kind: str = "sale", sources: str = "all", dump: bool = False) -> 
     with _state["lock"]:
         if _state["running"]:
             raise RuntimeError(u"прогон уже идёт")
+        if _state["closing"]:
+            raise RuntimeError(u"сервер перезапускается — прогон не начат")
         _state["running"] = True
         _state["stop"] = False
         _state["kind"] = kind
@@ -425,9 +450,20 @@ def run_scrape(kind: str = "sale", sources: str = "all", dump: bool = False) -> 
                 notes.append(u"неизвестный источник %s" % name)
                 continue
             src = get_source(name)
+            seen_before = run.seen
             try:
                 if _scrape_list(db, run, src, kind, fetcher, settings, unknown):
-                    completed.append(name)
+                    # Полный обход без единого объявления при десятках активных — это
+                    # непонятый ответ, а не опустевший рынок: снимать по нему нельзя
+                    # (F-012 Codex 03.11.2026). Самая маленькая выдача — аренда домов
+                    # OLX, 27 объявлений. Считаем только при пустом обходе: индекса,
+                    # покрывающего source+offer_type, нет, и счёт читает толстые строки
+                    active = _active_count(db, name, kind) if run.seen == seen_before else 0
+                    if active >= EMPTY_PASS_MIN_ACTIVE:
+                        failed.append(name)
+                        notes.append(u"%s: выдача пуста при %d активных — объявления не сняты" % (name, active))
+                    else:
+                        completed.append(name)
                 if src.needs_details:
                     _scrape_details(db, run, src, kind, fetcher, settings, unknown)
             except StopRequested:

@@ -574,10 +574,13 @@ def test_codex_f002_f006_f007_f008_f009(clean_db, monkeypatch):
         l = db.query(Listing).filter(Listing.offer_type == "sale", Listing.yield_pct.isnot(None)).first()
         before = l.yield_pct
         assert c.post("/api/listings/%d/manual" % l.id, json={"condition": "to_renovate"}, **a).status_code == 200
+        from app.settings_store import get_setting, set_setting
+        set_setting(db, M.RESCORE_FLAG, "2026-11-03T05:00:00")   # таймер в тестах выключен
         M._rescore_now()
         db.expire_all()
         l = db.get(Listing, l.id)
         assert l.yield_reno_cost_pln > 0 and l.yield_pct < before
+        assert not get_setting(db, M.RESCORE_FLAG)   # пересчитано — признак снят (F-002)
         # F-009
         l.characteristics_json = json.dumps({"is_ai_video_enabled": {"value": "1"}, "winda": {"label": "Winda", "value": "Tak"}})
         db.commit()
@@ -607,8 +610,31 @@ def test_admin_restart_refuses_during_run_and_for_viewer(clean_db, monkeypatch):
         monkeypatch.setattr(M.scraper, "is_running", lambda: True)
         assert c.post("/api/admin/restart", auth=("admin", "secret1")).status_code == 409
         monkeypatch.setattr(M.scraper, "is_running", lambda: False)
+        with M._busy_as(u"перерахунок"):
+            assert c.post("/api/admin/restart", auth=("admin", "secret1")).status_code == 409
         r = c.post("/api/admin/restart", auth=("admin", "secret1"))
         assert r.status_code == 200 and r.json()["restarting"] is True and len(exits) == 1
+        # F-010 Codex 03.11.2026: принятый перезапуск закрывает ворота — прогон, запрошенный
+        # в эти 1,5 с, раньше принимался и обрывался выходом процесса
+        assert c.post("/api/scrape?kind=sale", auth=("admin", "secret1")).status_code == 409
+        try:
+            M.scraper.run_scrape("sale", "all")       # повтор без сети, дома за квартирами
+            assert False, "прогон начался при закрытых воротах"
+        except RuntimeError:
+            pass
+        assert M.translate.translate_pending(clean_db, manual=True) in (u"сервер перезапускается",
+                                                                        u"провайдер не настроен")
+        died = []
+        monkeypatch.setattr(M.os, "_exit", lambda code: died.append(code))
+        monkeypatch.setattr(M.time, "sleep", lambda s: None)
+        monkeypatch.setattr(M.scraper, "is_running", lambda: True)
+        exits[0]()                                    # работа всё же идёт — выход отменён
+        assert died == [] and not M.scraper.closing()
+        monkeypatch.setattr(M.scraper, "is_running", lambda: False)
+        assert c.post("/api/admin/restart", auth=("admin", "secret1")).status_code == 200
+        exits[1]()
+        assert died == [0]
+    M._reopen_after_restart()                         # следующим тестам ворота нужны открытыми
 
 
 def test_network_failed_run_is_retried_later(clean_db, monkeypatch):

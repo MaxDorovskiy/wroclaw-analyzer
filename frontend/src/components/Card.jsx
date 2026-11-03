@@ -215,7 +215,7 @@ export default function Card({ id, onClose, onOpen, geo, goTo }) {
     const d = await api.manual(id, patch)
     setL(d)
     setForm({ osiedle: d.osiedle || '', condition: d.condition || '', note: d.note || '' })
-  }, willRescore ? 'Збережено. Знижку й дохідність буде перераховано протягом хвилини' : 'Збережено')
+  }, willRescore ? 'Збережено. Знижку й дохідність буде перераховано протягом хвилини, а якщо йде прогін — після нього' : 'Збережено')
 
   const modal = useModal(onClose, () => !!dirty)
 

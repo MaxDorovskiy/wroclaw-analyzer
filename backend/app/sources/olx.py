@@ -189,7 +189,11 @@ class Olx(Source):
                     import json as _json
                     fetcher.dump("olx_%s_page%d.json" % (offer_type, page),
                                  _json.dumps(data, ensure_ascii=False, indent=1))
-                items = data.get("data") or []
+                # нет списка «data» — ответ другой формы, а не пустая страница: иначе
+                # обход считался полным и старые объявления снимались (F-012 Codex 03.11.2026)
+                if not isinstance(data, dict) or not isinstance(data.get("data"), list):
+                    raise ValueError(u"выдача OLX не распознана: нет списка data (страница %d)" % page)
+                items = data["data"]
                 parsed = []
                 for it in items:
                     x = self.parse_item(it, offer_type)

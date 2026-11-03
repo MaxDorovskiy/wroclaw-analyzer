@@ -155,6 +155,47 @@ def test_run_without_network_is_failed_not_done(clean_db, monkeypatch):
     assert "WinError 10060" in run.message
 
 
+def test_unrecognized_listing_page_removes_nothing(clean_db, monkeypatch):
+    """F-012 Codex 03.11.2026: страница с __NEXT_DATA__, но без searchAds, проходила как
+    пустая полная выдача — прогон «done, full», и всё старше 3 дней снималось."""
+    db = clean_db
+    old = datetime.utcnow() - timedelta(days=5)
+    db.add_all([Listing(source="otodom", source_id=str(i), offer_type="sale", url="https://x/%d" % i,
+                        title_pl="a", is_active=True, last_seen=old, first_seen=old) for i in range(25)])
+    db.commit()
+    html = '<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"data":{}}}}</script>'
+
+    class FakeFetcher:
+        stats = {"requests": 1, "retries": 0, "blocked": 0, "browser": 0}
+
+        def get_html(self, url, params=None):
+            return html
+
+        def dump(self, *a):
+            pass
+
+        def close(self):
+            pass
+
+    class Src(Otodom):
+        needs_details = False
+
+    class Empty(Src):                     # ответ «понят», но объявлений ноль (OLX без metadata)
+        def iter_pages(self, offer_type, fetcher, start_page=1, settings=None):
+            yield 1, 1, []
+
+    monkeypatch.setattr(scraper, "make_fetcher", lambda settings, stop_check=None, dump=False: FakeFetcher())
+    monkeypatch.setattr(scraper, "post_process", lambda db, run=None, kind="sale", with_translate=True: u"")
+    monkeypatch.setattr(scraper, "translate_after_run", lambda: None)
+    for cls, said in ((Src, "searchAds"), (Empty, u"выдача пуста при 25 активных")):
+        monkeypatch.setattr(scraper, "REGISTRY", {"otodom": cls})
+        monkeypatch.setattr(scraper, "get_source", lambda name, cls=cls: cls())
+        run = db.get(ScrapeRun, scraper.run_scrape("sale", "otodom"))
+        assert run.status == "failed" and run.removed == 0 and not run.full, run.message
+        assert said in run.message
+        assert db.query(Listing).filter(Listing.is_active.is_(True)).count() == 25
+
+
 def test_gone_card_is_not_retried_forever(clean_db):
     """Otodom на снятое объявление отвечает 410 Gone (не 404): карточку больше не просим,
     ошибкой прогона это не считаем. Свежие — по дате подачи, а не по порядку вставки."""
