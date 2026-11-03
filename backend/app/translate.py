@@ -19,6 +19,7 @@ import html
 import json
 import logging
 import os
+import queue
 import re
 import threading
 import time
@@ -94,6 +95,9 @@ SYSTEM_PROMPT = (
 )
 CHUNK_CHARS = 2500
 _state = {"running": False, "last_error": None, "gpu": None, "lock": threading.Lock()}
+# как часто спрашивать реестр, пока модель молчит; реестр сам — не чаще
+# _Claim.CHECK_SEC. Худший случай уступки: 30 + 10 с, правило — в пределах минуты
+YIELD_POLL_S = 10
 
 
 def _hash(text: str) -> str:
@@ -131,28 +135,62 @@ class OllamaProvider(Provider):
         пределах минуты (Codex 28.10.2026, F-005). Теперь между кусками ответа
         зовётся _state["yield_check"] (lease.allowed: сам спрашивает реестр раз в
         минуту); отказ — обрываем поток (Ollama бросает генерацию, когда клиент
-        отключился) и бросаем GpuYield: текст вернётся в очередь без ошибки."""
-        check = _state.get("yield_check")
+        отключился) и бросаем GpuYield: текст вернётся в очередь без ошибки.
+
+        Поток читает отдельная нить, а здесь реестр спрашивается и по таймеру
+        (YIELD_POLL_S): пока модель грузится или молчит, строк нет, и проверка
+        «между кусками» ждала первой строки до 90 с и дольше (F-005 Codex
+        03.11.2026, подставной поток). Ответ без done=true или с error — ошибка,
+        а не перевод: обрезанный текст уходил в кэш как готовый (F-011)."""
+        check = _state.get("yield_check") or (lambda: True)
+        lines = queue.Queue()
+        box = {}
+
+        def pump():
+            try:
+                with httpx.stream("POST", self.url + "/api/chat", json={
+                        "model": self.model, "stream": True,
+                        # думающие модели (qwen3.x) без этого пишут рассуждения минутами
+                        "think": False,
+                        "messages": [{"role": "system", "content": SYSTEM_PROMPT},
+                                     {"role": "user", "content": text}],
+                        "options": {"temperature": 0.1, "num_ctx": self.num_ctx},
+                }, timeout=httpx.Timeout(300.0, read=120.0)) as r:
+                    box["resp"] = r
+                    r.raise_for_status()
+                    for line in r.iter_lines():
+                        lines.put(("line", line))
+                lines.put(("eof", None))
+            except Exception as e:  # noqa: BLE001 — отдаём читателю как есть
+                lines.put(("exc", e))
+
+        threading.Thread(target=pump, name="ollama-stream", daemon=True).start()
         parts = []
-        with httpx.stream("POST", self.url + "/api/chat", json={
-                "model": self.model, "stream": True,
-                # думающие модели (qwen3.x) без этого пишут рассуждения минутами
-                "think": False,
-                "messages": [{"role": "system", "content": SYSTEM_PROMPT},
-                             {"role": "user", "content": text}],
-                "options": {"temperature": 0.1, "num_ctx": self.num_ctx},
-        }, timeout=httpx.Timeout(300.0, read=120.0)) as r:
-            r.raise_for_status()
-            for line in r.iter_lines():
-                if check is not None and not check():
-                    raise GpuYield()
-                if not line:
-                    continue
-                chunk = json.loads(line)
-                parts.append((chunk.get("message") or {}).get("content") or "")
-                if chunk.get("done"):
-                    break
-        return "".join(parts)
+        while True:
+            try:
+                kind, val = lines.get(timeout=YIELD_POLL_S)
+            except queue.Empty:
+                kind, val = "wait", None
+            if kind == "exc":
+                raise val
+            if not check():
+                close = getattr(box.get("resp"), "close", None)
+                if close:
+                    try:
+                        close()                  # Ollama бросит генерацию, увидев обрыв
+                    except Exception:  # noqa: BLE001
+                        pass
+                raise GpuYield()
+            if kind == "wait" or (kind == "line" and not val):
+                continue
+            if kind == "eof":
+                raise RuntimeError(u"ответ Ollama оборван: нет done")
+            chunk = json.loads(val)
+            if chunk.get("error"):
+                raise RuntimeError(u"Ollama: %s" % chunk["error"])
+            parts.append((chunk.get("message") or {}).get("content") or "")
+            if chunk.get("done"):
+                return "".join(parts)
 
 
 class GpuYield(Exception):
@@ -434,7 +472,9 @@ class _Claim:
     """
 
     RENEW_SEC = 25 * 60       # заявка берётся на 1,5 ч — продлеваем с запасом
-    CHECK_SEC = 60            # правило: спрашивать реестр не реже раза в минуту
+    # правило: спрашивать реестр не реже раза в минуту. 60 с вместе с ожиданием
+    # строки давали уступку дольше минуты (F-005 Codex 03.11.2026); 30 с — с запасом
+    CHECK_SEC = 30
 
     def __init__(self, gpu, note, vram_gb):
         self.gpu, self.note, self.vram = gpu, note, vram_gb

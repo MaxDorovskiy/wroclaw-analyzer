@@ -113,6 +113,67 @@ def test_ollama_context_comes_from_settings(monkeypatch):
     assert translate.get_provider({"translate_provider": "ollama", "translate_ollama_num_ctx": "x"}).num_ctx == 8192
 
 
+def test_ollama_cut_stream_is_not_saved_and_silent_model_yields(clean_db, monkeypatch):
+    """F-011 Codex 03.11.2026: поток без done=true или с error возвращал накопленный
+    кусок, и он уходил в кэш как перевод. F-005: пока модель молчит, строк нет — уступка
+    ждала первой строки (в подставном потоке 90 с); теперь реестр спрашивается по таймеру."""
+    import json as _json
+    import threading
+    import time as _time
+
+    class Resp:
+        def __init__(self, lines, hold=None):
+            self.lines, self.hold, self.closed = lines, hold, False
+
+        def raise_for_status(self):
+            pass
+
+        def iter_lines(self):
+            if self.hold is not None:
+                self.hold.wait(5)
+            for x in self.lines:
+                yield x
+
+        def close(self):
+            self.closed = True
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    part = _json.dumps({"message": {"content": u"Квар"}})
+    db = clean_db
+    l = Listing(source="otodom", source_id="cut", offer_type="sale", url="https://x/cut",
+                title_pl=u"Mieszkanie", is_active=True)
+    db.add(l)
+    db.commit()
+    p = translate.OllamaProvider("http://ollama", "m")
+    for lines in ([part], [part, _json.dumps({"error": "model runner stopped"})]):
+        monkeypatch.setattr(translate.httpx, "stream", lambda *a, lines=lines, **k: Resp(lines))
+        try:
+            translate.translate_listing(db, l, p, with_description=False)
+            assert False, "обрезанный ответ принят за перевод"
+        except RuntimeError:
+            db.rollback()
+        db.refresh(l)
+        assert l.title_uk is None and db.query(Translation).count() == 0
+    hold = threading.Event()
+    silent = Resp([part], hold)
+    monkeypatch.setattr(translate.httpx, "stream", lambda *a, **k: silent)
+    monkeypatch.setattr(translate, "YIELD_POLL_S", 0.05)
+    monkeypatch.setitem(translate._state, "yield_check", lambda: False)
+    t0 = _time.time()
+    try:
+        p._chat(u"Mieszkanie")
+        assert False, "не уступили"
+    except translate.GpuYield:
+        pass
+    assert _time.time() - t0 < 1 and silent.closed
+    hold.set()
+
+
 def test_gpu_lease_only_for_our_card(clean_db, monkeypatch):
     """Видеокарта одна на все проекты владельца, очередь ведёт реестр заявок.
 
