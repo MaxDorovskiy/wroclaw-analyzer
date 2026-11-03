@@ -609,3 +609,38 @@ def test_admin_restart_refuses_during_run_and_for_viewer(clean_db, monkeypatch):
         monkeypatch.setattr(M.scraper, "is_running", lambda: False)
         r = c.post("/api/admin/restart", auth=("admin", "secret1"))
         assert r.status_code == 200 and r.json()["restarting"] is True and len(exits) == 1
+
+
+def test_network_failed_run_is_retried_later(clean_db, monkeypatch):
+    """02.11.2026 DNS роутера сбоил: продажа в 11:00 и 17:00 не собралась и ждала
+    следующего окна. Прогон без сети теперь повторяется через 30 мин, до трёх раз;
+    за домами после такого прогона не идём."""
+    from app import main as M
+    from app.models import ScrapeRun
+    db = clean_db
+    calls, timers = [], []
+
+    def fake_run(kind, sources):
+        calls.append(kind)
+        r = ScrapeRun(kind=kind, status="failed", message=u"otodom: [WinError 10061] No connection")
+        db.add(r)
+        db.commit()
+        return r.id
+
+    class T:
+        def __init__(self, sec, fn):
+            timers.append((sec, fn))
+            self.daemon = False
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(M.scraper, "run_scrape", fake_run)
+    monkeypatch.setattr(M.threading, "Timer", T)
+    M._net_retries.clear()
+    M._scrape_bg("sale", "all")
+    assert calls == ["sale"] and len(timers) == 1 and timers[0][0] == M.NET_RETRY_S
+    for _ in range(3):
+        timers[-1][1]()                     # «прошло 30 минут»
+    assert calls == ["sale"] * 4 and len(timers) == 3      # четвёртый сбой — повторов больше нет
+    M._net_retries.clear()

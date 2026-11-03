@@ -1169,6 +1169,52 @@ def _bg(target, *args):
     return t
 
 
+# Прогон, в котором ни один источник не ответил из-за СЕТИ (а не блока), повторяем
+# через 30 минут, до трёх раз. Иначе потерянный прогон ждал следующего окна:
+# 02.11.2026 DNS роутера сбоил, и продажа в 11:00 и 17:00 не собралась вовсе, хотя
+# сеть возвращалась через минуты (github.com 03.11 не находился через роутер, но
+# находился через 8.8.8.8).
+NET_RETRY_S = 30 * 60
+NET_RETRY_MAX = 3
+_NET_MARKERS = ("WinError 1006", "getaddrinfo", "ConnectError", "ConnectTimeout", "Name or service not known",
+                "Temporary failure in name resolution")
+_net_retries: Dict[str, int] = {}
+
+
+def _network_failed(run_id: int) -> bool:
+    db = SessionLocal()
+    try:
+        r = db.get(ScrapeRun, run_id)
+        return bool(r and r.status == "failed" and any(m in (r.message or "") for m in _NET_MARKERS))
+    finally:
+        db.close()
+
+
+def _retry_after_network(kind: str, sources: str):
+    n = _net_retries.get(kind, 0) + 1
+    if n > NET_RETRY_MAX:
+        log.error("прогон %s: сети нет — %d повтора не помогли, ждём следующего окна", kind, NET_RETRY_MAX)
+        _net_retries.pop(kind, None)
+        return
+    _net_retries[kind] = n
+    log.warning("прогон %s не достучался до площадок — повтор %d/%d через %d мин",
+                kind, n, NET_RETRY_MAX, NET_RETRY_S // 60)
+
+    def again():
+        if scraper.is_running():                 # занято другим прогоном — тот сам всё соберёт
+            return
+        db = SessionLocal()
+        try:
+            if scraper.paused_until(db):
+                return
+        finally:
+            db.close()
+        _scrape_bg(kind, sources)
+    t = threading.Timer(NET_RETRY_S, again)
+    t.daemon = True
+    t.start()
+
+
 def _scrape_bg(kind: str, sources: str):
     try:
         run_id = scraper.run_scrape(kind, sources)
@@ -1176,6 +1222,10 @@ def _scrape_bg(kind: str, sources: str):
         log.error("прогон %s упал: %s", kind, e)
         run_id = None
     _cache.clear()
+    if run_id and _network_failed(run_id):
+        _retry_after_network(kind, sources)
+        return
+    _net_retries.pop(kind, None)
     # Дома — тем же прогоном сразу после квартир (решение владельца №12, 03.11.2026):
     # своих задач Планировщика им не нужно, а это значит — и прав администратора.
     # Только за полным прогоном квартир: остановленный или на паузе не продолжаем.
