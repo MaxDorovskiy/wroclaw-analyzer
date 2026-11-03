@@ -408,3 +408,7 @@ def test_houses_parse_separately_from_flats():
     # цена в поле участка (живое объявление 03.11.2026) — участок не верим
     r.plot_area = r.price
     assert normalize(r)["plot_area"] is None
+    r.plot_area = 0.06                    # гектары вместо м²
+    assert normalize(r)["plot_area"] is None
+    r.plot_area = 10.9                    # садик таунхауса — настоящий
+    assert normalize(r)["plot_area"] == 10.9

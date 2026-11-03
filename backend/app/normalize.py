@@ -425,8 +425,11 @@ def normalize(raw: RawListing) -> Dict[str, Any]:
     d["plot_area"] = raw.plot_area
     # продавец вписал в поле участка цену: дом 93 м² за 879 000 zł с «участком
     # 879 000 м²» (88 га посреди города) — первый сбор домов 03.11.2026, тот же
-    # дом и на OLX. Цена при этом правдоподобна, ложное здесь — участок
-    if raw.plot_area and d.get("price_pln") and abs(raw.plot_area - d["price_pln"]) < 1:
+    # дом и на OLX. Цена при этом правдоподобна, ложное здесь — участок.
+    # Меньше 5 м² — тоже не участок («0,06» — гектары, «1»); садик таунхауса
+    # у застройщиков от 10,9 м² — его оставляем (тот же сбор, 14 домов < 50 м²)
+    if raw.plot_area and (raw.plot_area < 5
+                          or d.get("price_pln") and abs(raw.plot_area - d["price_pln"]) < 1):
         d["plot_area"] = None
     d["address_raw"] = raw.address_raw
     d["location_raw"] = u" | ".join(x for x in raw.location_names if x) or None
