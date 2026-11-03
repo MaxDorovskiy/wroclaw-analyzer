@@ -51,11 +51,25 @@ def otodom_code(url: Optional[str]) -> Optional[str]:
 #: * у квартир застройщика бывают «улетевшие» метки (Architektów: 2 км между
 #:   юнитами одной цены) — по месту разводим, только если ВСЕ пары точек дальше
 #:   MAX_POINT_GAP_M;
-#: * цена до злотого (EXACT_PRICE) — это тот же юнит, проверки не нужны.
+#: * цена до злотого (EXACT_PRICE) — это тот же юнит: расстояние ей прощаем
+#:   (934/8468: 1 522 457 zł, 84,23 м², метка застройщика в 1,5 км), а разницу лет
+#:   — нет (F-001 Codex 03.11.2026: 650 123 / 650 124, 2001 / 2028 г. склеивались);
+#: * «до злотого» — только если обе цены некруглые: 1 099 999 и 1 100 000 у квартир
+#:   на разных улицах, 2012 и 2018 г., 737 м (3898/36794) склеивались. «…999» само
+#:   по себе не круглая: у застройщика 868 999 и 868 999,9 — один юнит 64,55 м² в 1,7 км.
+#: Ближайшая пара точек, а не все пары — сознательно: проверка «все точки рядом»
+#: на копии 03.11.2026 вскрыла 14 скрытых продаж, и половина — та же квартира
+#: (pl. Legionów 389 999 / 390 000 в одной точке, 880 000 в 7 м). Цепочка через
+#: объявление без года (2172/33601/35469: 1970 и 1986 г., 600 м) остаётся — см. DEFERRED.
 MAX_YEAR_GAP = 3
 SAME_PLACE_M = 300.0
 MAX_POINT_GAP_M = 1000.0
 EXACT_PRICE = 5.0
+
+
+def _round_price(p: float) -> bool:
+    # без округления до злотого: 908 999,8 (прайс застройщика) — не 909 000
+    return p % 1000 == 0
 
 
 def _dist(a, b) -> float:
@@ -87,17 +101,17 @@ class _UF:
             x = self.p[x]
         return x
 
-    def compatible(self, a: int, b: int) -> bool:
+    def compatible(self, a: int, b: int, exact: bool = False) -> bool:
         ra, rb = self.find(a), self.find(b)
         if ra == rb:
             return True
         pa, pb = self.points.get(ra) or [], self.points.get(rb) or []
-        dmin = min((_dist(x, y) for x in pa for y in pb), default=None)   # квадрат метров
-        if dmin is not None and dmin > MAX_POINT_GAP_M ** 2:
+        d2 = [_dist(x, y) for x in pa for y in pb]                         # квадраты метров
+        if not exact and d2 and min(d2) > MAX_POINT_GAP_M ** 2:
             return False
         ya, yb = self.years.get(ra), self.years.get(rb)
         if ya and yb and max(ya[1], yb[1]) - min(ya[0], yb[0]) > MAX_YEAR_GAP:
-            return dmin is not None and dmin <= SAME_PLACE_M ** 2
+            return bool(d2) and min(d2) <= SAME_PLACE_M ** 2
         return True
 
     def union(self, a: int, b: int):
@@ -197,8 +211,8 @@ def rebuild_groups(db: Session) -> Dict[str, int]:
             if p1 and abs(p2 - p1) / p1 <= PRICE_TOL:
                 # «до злотого» — только некруглая цена (прайс застройщика 385 303);
                 # 650 000 у двух разных квартир вторички совпадает сплошь и рядом
-                exact = abs(p2 - p1) <= EXACT_PRICE and round(p1) % 1000 != 0
-                if exact or uf.compatible(id1, id2):
+                exact = abs(p2 - p1) <= EXACT_PRICE and not _round_price(p1) and not _round_price(p2)
+                if uf.compatible(id1, id2, exact):
                     uf.union(id1, id2)
                     linked_numeric += 1
                 else:

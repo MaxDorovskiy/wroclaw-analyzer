@@ -412,15 +412,26 @@ def test_numeric_key_does_not_glue_different_buildings(clean_db):
     c2 = flat("c2", 595000.0, 1910, 51.124, 17.0296)                   # пишут разный год
     d1 = flat("d1", 385303.0, 2027, 51.1356, 16.9252)                  # прайс застройщика —
     d2 = flat("d2", 385302.75, 2027, 51.1204, 16.9286)                 # метка «улетела» на 2 км
-    db.add_all([a, b, c1, c2, d1, d2])
+    # F-001 Codex 03.11.2026: «до злотого» прощает расстояние, но не 27 лет разницы
+    e1 = flat("e1", 650123.0, 2001, 51.080, 17.100, area=60.0)
+    e2 = flat("e2", 650124.0, 2028, 51.100, 17.090, area=60.0)         # ~2,4 км
+    # 1 099 999 / 1 100 000 — не прайс: разные улицы, 2012 и 2018 г., 737 м (3898/36794)
+    f1 = flat("f1", 1099999.0, 2012, 51.0802, 17.0634, area=68.0)
+    f2 = flat("f2", 1100000.0, 2018, 51.0785, 17.0532, area=68.38)
+    # а прайс застройщика «…999» с копейками — тот же юнит (868 999 / 868 999,9 на бою)
+    g1 = flat("g1", 908999.0, 2026, 51.100, 17.000, area=80.0)
+    g2 = flat("g2", 908999.8, 2026, 51.105, 17.005, area=79.94)
+    db.add_all([a, b, c1, c2, d1, d2, e1, e2, f1, f2, g1, g2])
     db.commit()
     res = dedup.rebuild_groups(db)
-    for x in (a, b, c1, c2, d1, d2):
+    for x in (a, b, c1, c2, d1, d2, e1, e2, f1, f2, g1, g2):
         db.refresh(x)
     assert a.dedup_group != b.dedup_group and a.is_representative and b.is_representative
     assert c1.dedup_group == c2.dedup_group
     assert d1.dedup_group == d2.dedup_group
-    assert res["refused"] >= 1
+    assert e1.dedup_group != e2.dedup_group and f1.dedup_group != f2.dedup_group
+    assert g1.dedup_group == g2.dedup_group
+    assert res["refused"] >= 3
 
 
 def test_houses_parse_separately_from_flats():
