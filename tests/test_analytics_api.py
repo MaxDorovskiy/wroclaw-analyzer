@@ -212,6 +212,9 @@ def test_users_roles_and_activity(clean_db, monkeypatch):
         assert act["per_user"]["yulia"] >= 3
         assert c.get("/api/me", **a).json()["users"] == ["admin", "yulia"]
         assert c.get("/api/health").status_code == 200                    # проверка живости без входа
+        import re as _re
+        h = c.get("/api/health").json()                                   # R-007: с каким кодом поднят
+        assert _re.match(r"^[0-9a-f]{12}$", h["commit"]) and "frontend" in h
 
 
 def test_yield_ignores_prices_that_are_not_flat_prices(clean_db):
@@ -566,9 +569,12 @@ def test_codex_f002_f006_f007_f008_f009(clean_db, monkeypatch):
         assert c.get("/api/settings", **y).status_code == 403
         assert c.get("/api/listings", auth=("admin", "wrong")).status_code == 401
         assert c.get("/api/listings").status_code == 401            # без заголовка — не попытка
+        # вход в браузере — это «/» (F-006, 03.11.2026); скрипты страницы — не попытки
+        assert c.get("/", auth=("codex", "wrong")).status_code == 401
+        assert c.get("/assets/index.js", auth=("codex", "wrong")).status_code == 401
         rows = db.query(AccessLog).order_by(AccessLog.id).all()[n0:]
         assert [(r.user, r.action, r.status) for r in rows] == [
-            ("yulia", "denied", 403), ("?admin", "login_failed", 401)]
+            ("yulia", "denied", 403), ("?admin", "login_failed", 401), ("?codex", "login_failed", 401)]
         assert all("wrong" not in ((r.query or "") + (r.note or "")) for r in rows)
         # F-002
         l = db.query(Listing).filter(Listing.offer_type == "sale", Listing.yield_pct.isnot(None)).first()

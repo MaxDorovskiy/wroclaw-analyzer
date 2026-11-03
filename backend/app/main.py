@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 
 from . import (analytics, dedup, fx, geo, i18n, presentation, questions, rent_analytics,
                scraper, translate)
-from .config import (DATA_DIR, DB_PATH, FRONTEND_DIST, HOUSE_OF, KINDS, SAFE_KEYS, SCAN_HOUR_RENT,
+from .config import (BASE_DIR, DATA_DIR, DB_PATH, FRONTEND_DIST, HOUSE_OF, KINDS, SAFE_KEYS, SCAN_HOUR_RENT,
                      SCAN_HOURS_SALE, SCAN_JITTER_SEC, SCAN_MINUTE_RENT, SECRET_KEYS,
                      SECRET_MASK, VERSION)
 from .db import SessionLocal, ensure_columns, get_db
@@ -177,8 +177,12 @@ async def _basic_auth(request: Request, call_next):
         if not ok:
             # Пустой заголовок — обычный первый запрос браузера до окна входа, не
             # попытка; неверный пароль — пишем под тем именем, которое ввели (без
-            # пароля). Имя обрезаем: в нём может быть что угодно.
-            if auth.startswith("Basic ") and request.url.path.startswith("/api/"):
+            # пароля). Имя обрезаем: в нём может быть что угодно. Сама страница
+            # «/» — тоже: обычный вход в браузере идёт именно на неё, и такой отказ
+            # в журнал не попадал (F-006 Codex 03.11.2026); скрипты и картинки —
+            # нет, иначе одна попытка дала бы десяток строк
+            if auth.startswith("Basic ") and (request.url.path.startswith("/api/")
+                                              or request.url.path in ("/", "/index.html")):
                 try:
                     tried = base64.b64decode(auth[6:]).decode("utf-8", "replace").partition(":")[0]
                 except Exception:  # noqa: BLE001
@@ -895,10 +899,45 @@ def _schedule_rescore(delay: float = RESCORE_DELAY_S, mark: bool = False):
 STARTED_AT = datetime.utcnow()
 
 
+def _code_commit() -> str:
+    """Коммит, с которого поднят ЭТОТ процесс: .git читается один раз при старте.
+    Новый pid говорит только «перезапустился», а не «с каким кодом» (R-007 Codex
+    03.11.2026). Без вызова git: в S4U-задаче его может не быть в PATH."""
+    git = BASE_DIR / ".git"
+    try:
+        head = (git / "HEAD").read_text().strip()
+        if not head.startswith("ref: "):
+            return head[:12]
+        ref = head[5:]
+        if (git / ref).exists():
+            return (git / ref).read_text().strip()[:12]
+        for line in (git / "packed-refs").read_text().splitlines():
+            if line.endswith(" " + ref):
+                return line.split()[0][:12]
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
+
+
+CODE_COMMIT = _code_commit()
+
+
+def _frontend_build() -> str:
+    """Сборка интерфейса — по имени главного скрипта в index.html (Vite кладёт в
+    него хэш содержимого). Читается при каждом запросе: интерфейс пересобирают
+    без перезапуска сервера."""
+    try:
+        m = re.search(r"assets/index-([\w-]+)\.js", (FRONTEND_DIST / "index.html").read_text(encoding="utf-8"))
+        return m.group(1) if m else ""
+    except OSError:
+        return ""
+
+
 @app.get("/api/health")
 def api_health():
     return {"ok": True, "db": str(DB_PATH), "version": VERSION,
-            "started_at": STARTED_AT, "pid": os.getpid()}
+            "started_at": STARTED_AT, "pid": os.getpid(),
+            "commit": CODE_COMMIT, "frontend": _frontend_build()}
 
 
 @app.get("/api/geo")
