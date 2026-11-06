@@ -1270,9 +1270,14 @@ class _busy_as(object):
 # находился через 8.8.8.8).
 NET_RETRY_S = 30 * 60
 NET_RETRY_MAX = 3
+# Сборщик занят другим видом прогона — повтор ждёт, а не теряется: аренда и дома не
+# соберут за продажу то, что она не собрала (F-014 Codex 06.11.2026)
+NET_BUSY_S = 10 * 60
 _NET_MARKERS = ("WinError 1006", "getaddrinfo", "ConnectError", "ConnectTimeout", "Name or service not known",
                 "Temporary failure in name resolution")
 _net_retries: Dict[str, int] = {}
+_net_timers: Dict[str, threading.Timer] = {}
+_net_due: Dict[str, dict] = {}       # для /api/jobs: когда и почему ждём
 
 
 def _network_failed(run_id: int) -> bool:
@@ -1288,30 +1293,61 @@ def _retry_after_network(kind: str, sources: str):
     n = _net_retries.get(kind, 0) + 1
     if n > NET_RETRY_MAX:
         log.error("прогон %s: сети нет — %d повтора не помогли, ждём следующего окна", kind, NET_RETRY_MAX)
-        _net_retries.pop(kind, None)
+        _net_retry_done(kind)
         return
     _net_retries[kind] = n
     log.warning("прогон %s не достучался до площадок — повтор %d/%d через %d мин",
                 kind, n, NET_RETRY_MAX, NET_RETRY_S // 60)
+    _schedule_net_retry(kind, sources, NET_RETRY_S, u"площадки не ответили")
+
+
+def _schedule_net_retry(kind: str, sources: str, delay: float, why: str):
+    """Один таймер на вид прогона: новый заменяет прежний, лишних запросов к площадке нет."""
+    old = _net_timers.pop(kind, None)
+    if old is not None:
+        old.cancel()
 
     def again():
-        if scraper.is_running():                 # занято другим прогоном — тот сам всё соберёт
+        if kind not in _net_retries:             # тот же вид уже собран обычным прогоном
             return
         db = SessionLocal()
         try:
             if scraper.paused_until(db):
+                _net_retry_done(kind)
                 return
         finally:
             db.close()
+        if scraper.is_running() or scraper.closing():
+            _schedule_net_retry(kind, sources, NET_BUSY_S, u"зайнятий інший прогін")
+            return
+        _net_timers.pop(kind, None)
+        _net_due.pop(kind, None)
         _scrape_bg(kind, sources)
-    t = threading.Timer(NET_RETRY_S, again)
+    t = threading.Timer(delay, again)
     t.daemon = True
+    _net_timers[kind] = t
+    _net_due[kind] = {"kind": kind, "attempt": _net_retries.get(kind, 0), "of": NET_RETRY_MAX,
+                      "due": datetime.utcnow() + timedelta(seconds=delay), "why": why}
     t.start()
+
+
+def _net_retry_done(kind: str):
+    _net_retries.pop(kind, None)
+    _net_due.pop(kind, None)
+    t = _net_timers.pop(kind, None)
+    if t is not None:
+        t.cancel()
 
 
 def _scrape_bg(kind: str, sources: str):
     try:
         run_id = scraper.run_scrape(kind, sources)
+    except scraper.Busy as e:
+        # Состояние сменилось между проверкой и стартом — ожидающий повтор не теряем
+        log.warning("прогон %s не начат: %s", kind, e)
+        if kind in _net_retries:
+            _schedule_net_retry(kind, sources, NET_BUSY_S, u"зайнятий інший прогін")
+        return
     except Exception as e:  # noqa: BLE001
         log.error("прогон %s упал: %s", kind, e)
         run_id = None
@@ -1319,7 +1355,7 @@ def _scrape_bg(kind: str, sources: str):
     if run_id and _network_failed(run_id):
         _retry_after_network(kind, sources)
         return
-    _net_retries.pop(kind, None)
+    _net_retry_done(kind)
     # Дома — тем же прогоном сразу после квартир (решение владельца №12, 03.11.2026):
     # своих задач Планировщика им не нужно, а это значит — и прав администратора.
     # Только за полным прогоном квартир: остановленный или на паузе не продолжаем.
@@ -1735,7 +1771,10 @@ def api_jobs():
     return {"scheduler_running": scheduler.running,
             "watchdog_running": watchdog_scheduler.running,
             "disabled_by_env": os.environ.get("DISABLE_SCHEDULER") == "1",
-            "jobs": [{"id": j.id, "next_run": j.next_run_time} for j in jobs]}
+            "jobs": [{"id": j.id, "next_run": j.next_run_time} for j in jobs],
+            # ждущие повторы после сбоя сети (живут в памяти: перезапуск сервера их сбрасывает,
+            # дальше — следующее окно Планировщика)
+            "net_retries": list(_net_due.values())}
 
 
 def migrate_favorites(db: Session) -> int:

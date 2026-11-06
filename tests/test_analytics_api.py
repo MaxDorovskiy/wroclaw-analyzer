@@ -213,8 +213,11 @@ def test_users_roles_and_activity(clean_db, monkeypatch):
         assert c.get("/api/me", **a).json()["users"] == ["admin", "yulia"]
         assert c.get("/api/health").status_code == 200                    # проверка живости без входа
         import re as _re
+        from app.config import BASE_DIR
         h = c.get("/api/health").json()                                   # R-007: с каким кодом поднят
-        assert _re.match(r"^[0-9a-f]{12}$", h["commit"]) and "frontend" in h
+        # в выгрузке для аудитора .git нет: коммит пуст, а не выдуман (R-010 Codex 06.11.2026)
+        assert ("frontend" in h and _re.match(r"^[0-9a-f]{12}$", h["commit"])
+                if (BASE_DIR / ".git").exists() else h["commit"] == "")
 
 
 def test_yield_ignores_prices_that_are_not_flat_prices(clean_db):
@@ -647,6 +650,7 @@ def test_network_failed_run_is_retried_later(clean_db, monkeypatch):
     """02.11.2026 DNS роутера сбоил: продажа в 11:00 и 17:00 не собралась и ждала
     следующего окна. Прогон без сети теперь повторяется через 30 мин, до трёх раз;
     за домами после такого прогона не идём."""
+    from datetime import datetime
     from app import main as M
     from app.models import ScrapeRun
     db = clean_db
@@ -663,9 +667,13 @@ def test_network_failed_run_is_retried_later(clean_db, monkeypatch):
         def __init__(self, sec, fn):
             timers.append((sec, fn))
             self.daemon = False
+            self.cancelled = False
 
         def start(self):
             pass
+
+        def cancel(self):
+            self.cancelled = True
 
     monkeypatch.setattr(M.scraper, "run_scrape", fake_run)
     monkeypatch.setattr(M.threading, "Timer", T)
@@ -675,4 +683,48 @@ def test_network_failed_run_is_retried_later(clean_db, monkeypatch):
     for _ in range(3):
         timers[-1][1]()                     # «прошло 30 минут»
     assert calls == ["sale"] * 4 and len(timers) == 3      # четвёртый сбой — повторов больше нет
-    M._net_retries.clear()
+    assert not M._net_retries and not M._net_timers and not M._net_due
+
+    # F-014 Codex 06.11.2026: к сроку повтора идёт другой вид прогона — повтор ждёт, а не теряется
+    del calls[:], timers[:]
+    M._scrape_bg("sale", "all")
+    monkeypatch.setattr(M.scraper, "is_running", lambda: True)
+    timers[-1][1]()
+    assert calls == ["sale"] and timers[-1][0] == M.NET_BUSY_S and M._net_retries == {"sale": 1}
+    assert M._net_due["sale"]["why"] and len(M._net_timers) == 1
+    monkeypatch.setattr(M.scraper, "is_running", lambda: False)
+
+    # состояние сменилось между проверкой и стартом — тоже ждёт
+    def busy(kind, sources):
+        raise M.scraper.Busy(u"прогон уже идёт")
+    monkeypatch.setattr(M.scraper, "run_scrape", busy)
+    timers[-1][1]()
+    assert timers[-1][0] == M.NET_BUSY_S and M._net_retries == {"sale": 1}
+    monkeypatch.setattr(M.scraper, "run_scrape", fake_run)
+
+    # чужой вид повторы не считает и не снимает; сбой считается как новая попытка, таймер один
+    timers[-1][1]()
+    assert calls == ["sale", "sale"] and M._net_retries == {"sale": 2} and len(M._net_timers) == 1
+
+    # обычный успешный прогон того же вида отменяет ожидание, сработавший таймер — без запроса
+    pending = timers[-1][1]
+
+    def ok_run(kind, sources):
+        r = ScrapeRun(kind=kind, status="done", message=u"")
+        db.add(r)
+        db.commit()
+        return r.id
+    monkeypatch.setattr(M.scraper, "run_scrape", ok_run)
+    monkeypatch.setattr(M, "HOUSE_OF", {})
+    M._scrape_bg("sale", "all")
+    assert not M._net_retries and not M._net_timers and not M._net_due
+    n = len(timers)
+    pending()
+    assert len(timers) == n
+
+    # пауза отменяет ожидание
+    monkeypatch.setattr(M.scraper, "run_scrape", fake_run)
+    M._scrape_bg("rent", "all")
+    monkeypatch.setattr(M.scraper, "paused_until", lambda db: datetime.utcnow())
+    timers[-1][1]()
+    assert not M._net_retries and not M._net_timers and not M._net_due
