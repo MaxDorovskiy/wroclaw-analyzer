@@ -72,7 +72,7 @@
 | `POST /api/recompute` **[admin]** | — | `{started: true}` — дубли + выгодность + доходность в фоне |
 | `GET /api/settings` **[admin]** | — | `{key: value}`; секреты замаскированы `••••••••` |
 | `POST /api/settings` **[admin]** | `{key: value, ...}` — только ключи из `SAFE_KEYS` | `{saved: [keys]}` |
-| `GET /api/jobs` | — | `{scheduler_running, disabled_by_env, jobs: [{id, next_run}]}` |
+| `GET /api/jobs` | — | `{scheduler_running, disabled_by_env, jobs: [{id, next_run}], net_retries: [{kind, attempt, of, due, why}]}` — `net_retries`: прогоны, ждущие повтора после сбоя сети |
 | `GET /api/export` | те же фильтры, что у `/api/listings`, + `format` (csv\|xlsx) | файл |
 | `GET /api/contacts` | `offer_type`, `seller_type`, `q` (имя или телефон), `sort` (active_total\|last_seen\|listings_sale\|listings_rent\|first_seen), `order`, `page`, `per_page` (50, макс. 500) | `{total, page, per_page, items: [{seller_key, seller_name, seller_type, seller_type_uk, seller_phone, source, listings_sale, listings_rent, active_total, first_seen, last_seen, osiedla: [до 6], sample_ids: [до 5]}]}` — продавцы, склеенные по телефону/имени |
 | `GET /api/contacts/export` | те же фильтры + `format` (csv\|xlsx) | файл |

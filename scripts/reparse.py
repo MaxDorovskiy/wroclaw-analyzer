@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
+from app.config import TECHNICAL_COPY  # noqa: E402
 from app.console import utf8_stdio  # noqa: E402
 from app.db import SessionLocal  # noqa: E402
 from app.models import Listing, ScrapeRun  # noqa: E402
@@ -29,7 +30,7 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     args = ap.parse_args()
     db = SessionLocal()
-    q = db.query(Listing).filter(Listing.raw_json.isnot(None))
+    q = db.query(Listing).filter(Listing.raw_json.isnot(None), Listing.offer_type != TECHNICAL_COPY)
     if args.source:
         q = q.filter(Listing.source == args.source)
     if args.limit:
