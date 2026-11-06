@@ -88,23 +88,14 @@ def test_ollama_context_comes_from_settings(monkeypatch):
 
     import json as _json
 
-    class Resp:
+    def handler(request):
         # потоковый ответ (с 02.11.2026, см. OllamaProvider._chat)
-        def raise_for_status(self):
-            pass
+        sent.append(_json.loads(request.content))
+        return translate.httpx.Response(200, text=u"\n".join((
+            _json.dumps({"message": {"content": u"<think>…</think>Квар"}}),
+            _json.dumps({"message": {"content": u"тира"}, "done": True}))))
 
-        def iter_lines(self):
-            yield _json.dumps({"message": {"content": u"<think>…</think>Квар"}})
-            yield _json.dumps({"message": {"content": u"тира"}, "done": True})
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-    monkeypatch.setattr(translate.httpx, "stream",
-                        lambda method, url, json=None, timeout=None: sent.append(json) or Resp())
+    monkeypatch.setattr(translate, "_ollama_transport", translate.httpx.MockTransport(handler))
     p = translate.get_provider({"translate_provider": "ollama", "translate_ollama_model": "qwen3.5:9b-q4_K_M",
                                 "translate_ollama_num_ctx": "16384"})
     assert p.translate([u"Mieszkanie"]) == [u"Квартира"]
@@ -116,42 +107,32 @@ def test_ollama_context_comes_from_settings(monkeypatch):
 def test_ollama_cut_stream_is_not_saved_and_silent_model_yields(clean_db, monkeypatch):
     """F-011 Codex 03.11.2026: поток без done=true или с error возвращал накопленный
     кусок, и он уходил в кэш как перевод. F-005: пока модель молчит, строк нет — уступка
-    ждала первой строки (в подставном потоке 90 с); теперь реестр спрашивается по таймеру."""
+    ждала первой строки (в подставном потоке 90 с); теперь реестр спрашивается по таймеру.
+    F-005 06.11.2026: чтение отменяется на любой стадии — и до заголовков, и на теле
+    ответа, и после кадра с ошибкой, — и после отмены его нити больше нет."""
+    import asyncio
     import json as _json
     import threading
     import time as _time
 
-    class Resp:
-        def __init__(self, lines, hold=None):
-            self.lines, self.hold, self.closed = lines, hold, False
-
-        def raise_for_status(self):
-            pass
-
-        def iter_lines(self):
-            if self.hold is not None:
-                self.hold.wait(5)
-            for x in self.lines:
-                yield x
-
-        def close(self):
-            self.closed = True
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
+    httpx = translate.httpx
     part = _json.dumps({"message": {"content": u"Квар"}})
+    error = _json.dumps({"error": "model runner stopped"})
     db = clean_db
     l = Listing(source="otodom", source_id="cut", offer_type="sale", url="https://x/cut",
                 title_pl=u"Mieszkanie", is_active=True)
     db.add(l)
     db.commit()
     p = translate.OllamaProvider("http://ollama", "m")
-    for lines in ([part], [part, _json.dumps({"error": "model runner stopped"})]):
-        monkeypatch.setattr(translate.httpx, "stream", lambda *a, lines=lines, **k: Resp(lines))
+
+    def mock(handler):
+        monkeypatch.setattr(translate, "_ollama_transport", httpx.MockTransport(handler))
+
+    def readers():
+        return [t for t in threading.enumerate() if t.name == "ollama-stream"]
+
+    for lines in ([part], [part, error]):
+        mock(lambda request, lines=lines: httpx.Response(200, text=u"\n".join(lines)))
         try:
             translate.translate_listing(db, l, p, with_description=False)
             assert False, "обрезанный ответ принят за перевод"
@@ -159,19 +140,71 @@ def test_ollama_cut_stream_is_not_saved_and_silent_model_yields(clean_db, monkey
             db.rollback()
         db.refresh(l)
         assert l.title_uk is None and db.query(Translation).count() == 0
-    hold = threading.Event()
-    silent = Resp([part], hold)
-    monkeypatch.setattr(translate.httpx, "stream", lambda *a, **k: silent)
-    monkeypatch.setattr(translate, "YIELD_POLL_S", 0.05)
-    monkeypatch.setitem(translate._state, "yield_check", lambda: False)
-    t0 = _time.time()
+    assert not readers()
+
+    # кадр с ошибкой, а сервер дальше держит соединение: читателя всё равно нет
+    gone = []
+
+    async def error_then_hang(request):
+        async def body():
+            try:
+                yield (error + "\n").encode()
+                await asyncio.sleep(30)
+            except asyncio.CancelledError:
+                gone.append("тело")
+                raise
+        return httpx.Response(200, content=body())
+    mock(error_then_hang)
     try:
         p._chat(u"Mieszkanie")
-        assert False, "не уступили"
-    except translate.GpuYield:
+        assert False, "ошибка модели принята за перевод"
+    except RuntimeError:
         pass
-    assert _time.time() - t0 < 1 and silent.closed
-    hold.set()
+    assert gone == ["тело"] and not readers()
+
+    # уступка: модель молчит до заголовков и на теле ответа, отмен подряд — несколько
+    async def no_headers(request):
+        try:
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            gone.append("заголовки")
+            raise
+
+    async def no_body(request):
+        async def body():
+            try:
+                await asyncio.sleep(30)
+                yield (part + "\n").encode()
+            except asyncio.CancelledError:
+                gone.append("тело")
+                raise
+        return httpx.Response(200, content=body())
+
+    monkeypatch.setattr(translate, "YIELD_POLL_S", 0.05)
+    monkeypatch.setitem(translate._state, "yield_check", lambda: False)
+    for handler in (no_headers, no_body, no_headers):
+        del gone[:]
+        mock(handler)
+        t0 = _time.time()
+        try:
+            p._chat(u"Mieszkanie")
+            assert False, "не уступили"
+        except translate.GpuYield:
+            pass
+        assert _time.time() - t0 < 2 and gone and not readers()
+
+    # таймаут чтения — та же ошибка наверх, читателя нет
+    monkeypatch.setitem(translate._state, "yield_check", None)
+
+    async def read_timeout(request):
+        raise httpx.ReadTimeout("молчит 120 с", request=request)
+    mock(read_timeout)
+    try:
+        p._chat(u"Mieszkanie")
+        assert False, "таймаут принят за перевод"
+    except httpx.ReadTimeout:
+        pass
+    assert not readers()
 
 
 def test_gpu_lease_only_for_our_card(clean_db, monkeypatch):

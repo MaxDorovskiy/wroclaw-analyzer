@@ -14,6 +14,7 @@ PROMPT_VERSION: старые переводы станут «устаревши�
 
 Оригинал хранится всегда, перевод — производная.
 """
+import asyncio
 import hashlib
 import html
 import json
@@ -98,6 +99,7 @@ _state = {"running": False, "last_error": None, "gpu": None, "lock": threading.L
 # как часто спрашивать реестр, пока модель молчит; реестр сам — не чаще
 # _Claim.CHECK_SEC. Худший случай уступки: 30 + 10 с, правило — в пределах минуты
 YIELD_POLL_S = 10
+_ollama_transport = None             # тесты подставляют httpx.MockTransport: без сети
 
 
 def _hash(text: str) -> str:
@@ -141,56 +143,87 @@ class OllamaProvider(Provider):
         (YIELD_POLL_S): пока модель грузится или молчит, строк нет, и проверка
         «между кусками» ждала первой строки до 90 с и дольше (F-005 Codex
         03.11.2026, подставной поток). Ответ без done=true или с error — ошибка,
-        а не перевод: обрезанный текст уходил в кэш как готовый (F-011)."""
+        а не перевод: обрезанный текст уходил в кэш как готовый (F-011).
+        На любом выходе чтение отменяется (см. _StreamReader)."""
         check = _state.get("yield_check") or (lambda: True)
-        lines = queue.Queue()
-        box = {}
-
-        def pump():
-            try:
-                with httpx.stream("POST", self.url + "/api/chat", json={
-                        "model": self.model, "stream": True,
-                        # думающие модели (qwen3.x) без этого пишут рассуждения минутами
-                        "think": False,
-                        "messages": [{"role": "system", "content": SYSTEM_PROMPT},
-                                     {"role": "user", "content": text}],
-                        "options": {"temperature": 0.1, "num_ctx": self.num_ctx},
-                }, timeout=httpx.Timeout(300.0, read=120.0)) as r:
-                    box["resp"] = r
-                    r.raise_for_status()
-                    for line in r.iter_lines():
-                        lines.put(("line", line))
-                lines.put(("eof", None))
-            except Exception as e:  # noqa: BLE001 — отдаём читателю как есть
-                lines.put(("exc", e))
-
-        threading.Thread(target=pump, name="ollama-stream", daemon=True).start()
+        reader = _StreamReader(self.url + "/api/chat", {
+            "model": self.model, "stream": True,
+            # думающие модели (qwen3.x) без этого пишут рассуждения минутами
+            "think": False,
+            "messages": [{"role": "system", "content": SYSTEM_PROMPT},
+                         {"role": "user", "content": text}],
+            "options": {"temperature": 0.1, "num_ctx": self.num_ctx},
+        })
         parts = []
-        while True:
+        try:
+            while True:
+                try:
+                    kind, val = reader.lines.get(timeout=YIELD_POLL_S)
+                except queue.Empty:
+                    kind, val = "wait", None
+                if kind == "exc":
+                    raise val
+                if not check():
+                    raise GpuYield()
+                if kind == "wait" or (kind == "line" and not val):
+                    continue
+                if kind == "eof":
+                    raise RuntimeError(u"ответ Ollama оборван: нет done")
+                chunk = json.loads(val)
+                if chunk.get("error"):
+                    raise RuntimeError(u"Ollama: %s" % chunk["error"])
+                parts.append((chunk.get("message") or {}).get("content") or "")
+                if chunk.get("done"):
+                    return "".join(parts)
+        finally:
+            reader.cancel()
+
+
+class _StreamReader:
+    """Чтение потока Ollama в своей нити, отменяемое на ЛЮБОЙ стадии.
+
+    Асинхронный клиент — ради отмены: у синхронного до заголовков ответа нет объекта,
+    который можно закрыть, и после уступки запрос продолжал висеть (Codex 06.11.2026,
+    F-005: нить жила, пока сервер не ответит, — до 120 с), а модель всё это время считала.
+    Отмена задачи рвёт соединение на подключении, в ожидании заголовков и на чтении;
+    Ollama бросает генерацию, увидев обрыв."""
+
+    def __init__(self, url: str, body: dict):
+        self.lines = queue.Queue()
+        self._loop = asyncio.new_event_loop()
+        self._task = self._loop.create_task(self._pump(url, body))
+        self._thread = threading.Thread(target=self._run, name="ollama-stream", daemon=True)
+        self._thread.start()
+
+    async def _pump(self, url: str, body: dict):
+        async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, read=120.0), transport=_ollama_transport) as client:
+            async with client.stream("POST", url, json=body) as r:
+                r.raise_for_status()
+                async for line in r.aiter_lines():
+                    self.lines.put(("line", line))
+        self.lines.put(("eof", None))
+
+    def _run(self):
+        try:
+            self._loop.run_until_complete(self._task)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:  # noqa: BLE001 — отдаём читателю как есть
+            self.lines.put(("exc", e))
+        finally:
             try:
-                kind, val = lines.get(timeout=YIELD_POLL_S)
-            except queue.Empty:
-                kind, val = "wait", None
-            if kind == "exc":
-                raise val
-            if not check():
-                close = getattr(box.get("resp"), "close", None)
-                if close:
-                    try:
-                        close()                  # Ollama бросит генерацию, увидев обрыв
-                    except Exception:  # noqa: BLE001
-                        pass
-                raise GpuYield()
-            if kind == "wait" or (kind == "line" and not val):
-                continue
-            if kind == "eof":
-                raise RuntimeError(u"ответ Ollama оборван: нет done")
-            chunk = json.loads(val)
-            if chunk.get("error"):
-                raise RuntimeError(u"Ollama: %s" % chunk["error"])
-            parts.append((chunk.get("message") or {}).get("content") or "")
-            if chunk.get("done"):
-                return "".join(parts)
+                self._loop.run_until_complete(self._loop.shutdown_asyncgens())
+            finally:
+                self._loop.close()
+
+    def cancel(self, wait: float = 5.0):
+        try:
+            self._loop.call_soon_threadsafe(self._task.cancel)
+        except RuntimeError:                 # цикл уже закрыт — нить закончила сама
+            pass
+        self._thread.join(wait)
+        if self._thread.is_alive():
+            log.warning("поток Ollama не завершился за %s с после отмены", wait)
 
 
 class GpuYield(Exception):

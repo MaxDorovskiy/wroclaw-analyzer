@@ -146,22 +146,8 @@ def test_ollama_stream_yields_gpu_mid_answer(monkeypatch):
 
     chunks = [{"message": {"content": u"При"}}, {"message": {"content": u"віт"}},
               {"message": {"content": u"!"}, "done": True}]
-
-    class FakeResp:
-        def raise_for_status(self):
-            pass
-
-        def iter_lines(self):
-            for c in chunks:
-                yield _json.dumps(c)
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-    monkeypatch.setattr(T.httpx, "stream", lambda *a, **kw: FakeResp())
+    monkeypatch.setattr(T, "_ollama_transport", T.httpx.MockTransport(
+        lambda request: T.httpx.Response(200, text=u"\n".join(_json.dumps(c) for c in chunks))))
     p = T.OllamaProvider("http://x", "m")
     T._state["yield_check"] = None
     assert p.translate([u"Cześć!"]) == [u"Привіт!"]
