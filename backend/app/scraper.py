@@ -299,6 +299,14 @@ def _scrape_details(db: Session, run: ScrapeRun, src, kind: str, fetcher, settin
         select(Listing.id).where(Listing.source == src.name, Listing.offer_type == kind,
                                  Listing.is_active.is_(True), Listing.details_fetched.is_(False))
         .order_by(Listing.posted_at.desc(), Listing.first_seen.desc()).limit(limit)).all()]
+    # Карточка однажды ответила 404/410, а объявление всё ещё в выдаче этого прогона —
+    # значит, оно не снято. Без повтора оно оставалось без описания, координат и рынка
+    # навсегда: на 06.11.2026 таких 106, первые с 18.09, и их карточки отвечали нормально
+    ids += [r[0] for r in db.execute(
+        select(Listing.id).where(Listing.source == src.name, Listing.offer_type == kind,
+                                 Listing.is_active.is_(True), Listing.details_fetched.is_(True),
+                                 Listing.description_pl.is_(None), Listing.last_seen >= run.started_at)
+        .order_by(func.random()).limit(CARD_RETRY_PER_RUN)).all()]
     if not ids:
         return
     log.info("%s/%s: хвост, карточек %d", src.name, kind, len(ids))
@@ -345,6 +353,7 @@ def _scrape_details(db: Session, run: ScrapeRun, src, kind: str, fetcher, settin
 
 
 EMPTY_PASS_MIN_ACTIVE = 20
+CARD_RETRY_PER_RUN = 120     # см. _scrape_details; на прогон продажи это +10 минут в худшем случае
 
 
 def _active_count(db: Session, source: str, kind: str) -> int:

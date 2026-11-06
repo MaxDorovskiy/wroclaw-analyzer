@@ -342,6 +342,11 @@ def test_gone_card_is_not_retried_forever(clean_db):
     assert gone.details_fetched is True and run.errors == 0
     scraper._scrape_details(db, run, Src(), "rent", None, {"details_per_run": "1"}, {})
     assert asked == ["https://x/gone", "https://x/old"]       # второй раз снятое не запрашивается
+    # …а если оно снова в выдаче этого прогона, то не снято: 106 таких жили без описания с 18.09
+    gone.last_seen = datetime.utcnow() + timedelta(seconds=1)
+    db.commit()
+    scraper._scrape_details(db, run, Src(), "rent", None, {"details_per_run": "1"}, {})
+    assert asked == ["https://x/gone", "https://x/old", "https://x/gone"]
 
 
 def test_pause_and_watchdog(clean_db):
