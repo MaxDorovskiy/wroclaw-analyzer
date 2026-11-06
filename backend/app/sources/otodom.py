@@ -223,25 +223,47 @@ class Otodom(Source):
                 fetcher.dump("otodom_%s_page%d.html" % (offer_type, page), html)
             data = extract_next_data(html)
             items, pagination = find_search_block(data)
-            # Пусто И без searchAds — это не «объявлений нет», а другая страница:
-            # без проверки прогон считал обход полным и снимал всё старше 3 дней
-            # (F-012 Codex 03.11.2026, воспроизведено на подставной выдаче)
-            if not items and not isinstance(_dig(data, "props", "pageProps", "data", "searchAds"), dict):
-                raise ValueError(u"выдача Otodom не распознана: нет searchAds (страница %d)" % page)
+            # Пусто И без списка searchAds.items — это не «объявлений нет», а другая
+            # страница: без проверки прогон считал обход полным и снимал всё старше
+            # 3 дней (F-012 Codex 03.11.2026, воспроизведено на подставной выдаче;
+            # 06.11: пустой объект searchAds проходил проверку и снимал малый каталог)
+            if not items and not isinstance(_dig(data, "props", "pageProps", "data", "searchAds", "items"), list):
+                raise ValueError(u"выдача Otodom не распознана: нет списка searchAds.items (страница %d)" % page)
             total_pages = 0
             try:
                 total_pages = int(pagination.get("totalPages") or 0)
             except (TypeError, ValueError):
                 total_pages = 0
-            parsed = [x for x in (self.parse_item(it, offer_type) for it in flatten_items(items)) if x]
+            parsed = [x for x in (self.parse_item(it, offer_type) for it in self._without_copies(items)) if x]
             yield page, (total_pages or page), parsed
             if not items or (total_pages and page >= total_pages):
                 break
             page += 1
 
+    def _without_copies(self, items: List[dict]) -> Iterator[dict]:
+        """Страница без технической копии её первого объявления.
+
+        Последний, 73-й элемент каждой страницы — тот же slug, что у первого, но служебный
+        id и дата «1999-02-29 00:00:01»: 18.09.2026 — 9+id+00067 (3 860 короткоживущих
+        строк), с 12.10.2026 — один id на сутки (9000062281), и в одну строку базы за прогон
+        писалось до 121 разного объявления, а с домами она ещё и меняла тип сделки
+        (F-013 Codex 06.11.2026). Slug — на случай, если формат копии опять сменится."""
+        seen = set()
+        for it in flatten_items(items):
+            slug = it.get("slug")
+            if slug and slug in seen:
+                self.skipped["technical_copy"] = self.skipped.get("technical_copy", 0) + 1
+                continue
+            if slug:
+                seen.add(slug)
+            yield it
+
     def parse_item(self, it: dict, offer_type: str) -> Optional[RawListing]:
         sid = it.get("id")
         if sid is None:
+            return None
+        if str(it.get("dateCreated") or "").startswith("1999-"):     # см. _without_copies
+            self.skipped["technical_copy"] = self.skipped.get("technical_copy", 0) + 1
             return None
         # estate="INVESTMENT" — инвестиция целиком (живой ответ 18.09.2026: цена, площадь,
         # комнаты и этаж = null, есть только priceFromPerSquareMeter и диапазоны). Её

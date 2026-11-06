@@ -51,7 +51,17 @@ DETAILS_ONLY = {"description_pl", "characteristics_json", "raw_json",
                 "condition", "condition_src", "price_note"}
 # причины Source.skipped — для сообщения прогона
 SKIP_LABELS = {"investment": u"инвестиций целиком", "outside": u"вне Вроцлава",
-               "other_estate": u"другого типа (дом среди квартир или наоборот)"}
+               "other_estate": u"другого типа (дом среди квартир или наоборот)",
+               "technical_copy": u"технических копий"}
+# Вычисленное для одного типа сделки к другому не относится (см. upsert)
+SCORE_FIELDS = ("discount_pct", "baseline_sqm", "baseline_level", "baseline_key", "baseline_count",
+                "deal_thin_base", "price_sqm_adj", "deal_updated_at", "rent_median_pln",
+                "rent_baseline_level", "rent_baseline_count", "yield_pct", "yield_investment_pln",
+                "yield_reno_cost_pln")
+
+
+class Busy(RuntimeError):
+    """Прогон не начат: идёт другой или сервер перезапускается."""
 
 
 # ---------- состояние ----------
@@ -193,6 +203,11 @@ def upsert(db: Session, raw: RawListing, run: ScrapeRun, now: datetime,
             db.add(PriceHistory(listing_id=row.id, price_pln=row.price_pln, seen_at=now))
         run.new += 1
         return row
+    # Сменился тип сделки — оценки прежнего типа больше не верны, а пересчёт домов и
+    # аренды их не трогает: у домов оставались скидка и доходность квартиры (F-013 Codex 06.11.2026)
+    if d.get("offer_type") and d["offer_type"] != row.offer_type:
+        for f in SCORE_FIELDS:
+            setattr(row, f, None)
     new_price = d.get("price_pln")
     if new_price and row.price_pln and abs(new_price - row.price_pln) > 0.5:
         db.add(PriceHistory(listing_id=row.id, price_pln=new_price, seen_at=now))
@@ -414,9 +429,9 @@ def run_scrape(kind: str = "sale", sources: str = "all", dump: bool = False) -> 
     """Синхронный прогон (main.py запускает в потоке). Возвращает id прогона."""
     with _state["lock"]:
         if _state["running"]:
-            raise RuntimeError(u"прогон уже идёт")
+            raise Busy(u"прогон уже идёт")
         if _state["closing"]:
-            raise RuntimeError(u"сервер перезапускается — прогон не начат")
+            raise Busy(u"сервер перезапускается — прогон не начат")
         _state["running"] = True
         _state["stop"] = False
         _state["kind"] = kind

@@ -24,6 +24,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from . import geo
+from .config import TECHNICAL_COPY
 from .models import Listing
 
 log = logging.getLogger("geo_knn")
@@ -89,9 +90,12 @@ class OsiedleMap(object):
 def build_map(db: Session, exclude_ids: Optional[set] = None) -> OsiedleMap:
     """Карта из объявлений, где источник САМ назвал осиедле (это Otodom).
     Свои же догадки в карту не попадают — иначе ошибка расползлась бы."""
+    # технические копии Otodom — не в карту: координаты в них от одного объявления, а
+    # осиедле от другого (в строку писалось до 121 объявления за прогон, см. TECHNICAL_COPY)
     rows = db.execute(select(Listing.id, Listing.lat, Listing.lon, Listing.osiedle).where(
         Listing.lat.isnot(None), Listing.lon.isnot(None), _precise(),
-        Listing.osiedle.isnot(None), Listing.osiedle_src.is_(None))).all()
+        Listing.osiedle.isnot(None), Listing.osiedle_src.is_(None),
+        Listing.offer_type != TECHNICAL_COPY)).all()
     pts = [(r[1], r[2], r[3]) for r in rows if not exclude_ids or r[0] not in exclude_ids]
     return OsiedleMap(pts)
 

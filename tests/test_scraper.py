@@ -196,6 +196,121 @@ def test_unrecognized_listing_page_removes_nothing(clean_db, monkeypatch):
         assert db.query(Listing).filter(Listing.is_active.is_(True)).count() == 25
 
 
+def test_small_catalog_unknown_answer_is_a_failure_honest_empty_is_not(clean_db, monkeypatch):
+    """F-012 Codex 06.11.2026: порог ≥20 активных не спасает малый каталог, если непонятый
+    ответ выглядит пустым: {"metadata":{}} у OLX и пустой searchAds у Otodom снимали все 19.
+    Честная пустая выдача при этом должна снимать: объявлений и правда нет."""
+    db = clean_db
+    old = datetime.utcnow() - timedelta(days=5)
+
+    def seed(source):
+        db.query(Listing).delete()
+        db.add_all([Listing(source=source, source_id=str(i), offer_type="sale", url="https://x/%d" % i,
+                            title_pl="a", is_active=True, last_seen=old, first_seen=old) for i in range(19)])
+        db.commit()
+
+    class FakeFetcher:
+        stats = {"requests": 1, "retries": 0, "blocked": 0, "browser": 0}
+
+        def __init__(self, answer):
+            self.answer = answer
+
+        def get_json(self, url, params=None):
+            return self.answer
+
+        def get_html(self, url, params=None):
+            return '<script id="__NEXT_DATA__" type="application/json">%s</script>' % json.dumps(self.answer)
+
+        def dump(self, *a):
+            pass
+
+        def close(self):
+            pass
+
+    class Oto(Otodom):
+        needs_details = False
+
+    def page(ads):
+        return {"props": {"pageProps": {"data": {"searchAds": ads}}}}
+
+    monkeypatch.setattr(scraper, "post_process", lambda db, run=None, kind="sale", with_translate=True: u"")
+    monkeypatch.setattr(scraper, "translate_after_run", lambda: None)
+    for source, cls, answer, removed in (
+            ("olx", Olx, {"metadata": {}}, 0),
+            ("olx", Olx, {"data": [], "metadata": {"total_elements": 0}}, 19),
+            ("otodom", Oto, page({}), 0),
+            ("otodom", Oto, page({"items": [], "pagination": {"totalPages": 0}}), 19)):
+        seed(source)
+        monkeypatch.setattr(scraper, "REGISTRY", {source: cls})
+        monkeypatch.setattr(scraper, "get_source", lambda name, cls=cls: cls())
+        monkeypatch.setattr(scraper, "make_fetcher",
+                            lambda settings, stop_check=None, dump=False, answer=answer: FakeFetcher(answer))
+        run = db.get(ScrapeRun, scraper.run_scrape("sale", source))
+        db.expire_all()
+        assert run.removed == removed, (source, answer, run.message)
+        assert run.status == ("done" if removed else "failed") and bool(run.full) == bool(removed)
+
+
+def test_otodom_page_tail_copy_is_not_a_listing(clean_db):
+    """Последний, 73-й элемент каждой страницы Otodom — копия первого: тот же slug, дата
+    «1999-02-29», служебный id. С 12.10.2026 id один на сутки — и в одну строку базы за
+    прогон писалось до 121 разного объявления (Codex 06.11.2026, F-013: так она попала в дома)."""
+    def ad(sid, slug, date):
+        return {"id": sid, "slug": slug, "estate": "FLAT", "dateCreated": date, "title": "T",
+                "totalPrice": {"value": 500000}, "areaInSquareMeters": 50, "roomsNumber": "TWO", "location": {}}
+
+    first = ad(68593476, "pierwsze-ID4DOio", "2026-11-03T00:51:37Z")
+    second = ad(68593477, "drugie-ID4DOip", "2026-11-03T00:51:38Z")
+    old_copy = ad(96859347600067, "pierwsze-ID4DOio", "1999-02-29 00:00:01")
+    new_copy = ad(9000062281, "pierwsze-ID4DOio", "1999-02-29 00:00:01")
+    other_format = ad(77, "pierwsze-ID4DOio", "2030-01-01")      # формат копии снова сменится
+
+    class Fetcher:
+        def __init__(self, items):
+            self.items = items
+
+        def get_html(self, url, params=None):
+            return ('<script id="__NEXT_DATA__" type="application/json">%s</script>' % json.dumps(
+                {"props": {"pageProps": {"data": {"searchAds": {"items": self.items, "pagination": {"totalPages": 1}}}}}}))
+
+        def dump(self, *a):
+            pass
+
+    for copy in (old_copy, new_copy, other_format):
+        src = Otodom()
+        pages = list(src.iter_pages("sale", Fetcher([first, second, copy])))
+        assert [str(x.source_id) for x in pages[0][2]] == ["68593476", "68593477"]
+        assert src.skipped["technical_copy"] == 1
+    src = Otodom()
+    assert src.parse_item(new_copy, "sale") is None and src.skipped["technical_copy"] == 1
+
+
+def test_type_change_clears_scores_of_the_old_type(clean_db):
+    """F-013 Codex 06.11.2026: upsert менял offer_type, а скидка и доходность квартиры
+    оставались у дома навсегда: пересчёты смотрят только на sale."""
+    from app import analytics, rent_analytics
+    from app.sources.base import RawListing
+    db = clean_db
+    now = datetime.utcnow()
+    l = Listing(source="otodom", source_id="1", offer_type="sale", url="https://x/1", title_pl="a", price_pln=500000.0,
+                area=50.0, is_active=True, first_seen=now, last_seen=now, discount_pct=20.0, yield_pct=7.0,
+                baseline_sqm=12000.0, rent_median_pln=3000.0, deal_updated_at=now)
+    run = ScrapeRun(kind="sale", status="running")
+    db.add_all([l, run])
+    db.commit()
+    same = RawListing(source="otodom", source_id="1", url="https://x/1", offer_type="sale", title="a", price=500000.0)
+    scraper.upsert(db, same, run, now, {})
+    assert l.discount_pct == 20.0 and l.yield_pct == 7.0           # без смены типа оценки не трогаем
+    house = RawListing(source="otodom", source_id="1", url="https://x/1", offer_type="house_sale", title="a", price=500000.0)
+    scraper.upsert(db, house, run, now, {})
+    db.commit()
+    analytics.recompute_deal_scores(db)
+    rent_analytics.recompute_yields(db)
+    db.refresh(l)
+    assert l.offer_type == "house_sale"
+    assert l.discount_pct is None and l.yield_pct is None and l.baseline_sqm is None and l.rent_median_pln is None
+
+
 def test_gone_card_is_not_retried_forever(clean_db):
     """Otodom на снятое объявление отвечает 410 Gone (не 404): карточку больше не просим,
     ошибкой прогона это не считаем. Свежие — по дате подачи, а не по порядку вставки."""

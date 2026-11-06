@@ -27,6 +27,7 @@ from typing import Dict, List, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .config import TECHNICAL_COPY
 from .models import Listing
 
 PRICE_TOL = 0.03
@@ -166,7 +167,7 @@ def rebuild_groups(db: Session) -> Dict[str, int]:
             Listing.price_pln, Listing.is_active, Listing.first_image,
             Listing.dedup_detached, Listing.market, Listing.seller_type,
             Listing.build_year, Listing.lat, Listing.lon, Listing.geo_radius_km)
-    rows = db.execute(select(*cols)).all()
+    rows = db.execute(select(*cols).where(Listing.offer_type != TECHNICAL_COPY)).all()
     uf = _UF()
     by_code: Dict[str, int] = {}
     mirrors: List[tuple] = []

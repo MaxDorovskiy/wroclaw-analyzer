@@ -122,13 +122,18 @@ class Olx(Source):
         if hi is not None:
             params["filter_float_price:to"] = hi
         data = fetcher.get_json(OLX_API, params)
-        meta = data.get("metadata") or {}
+        meta = (data.get("metadata") if isinstance(data, dict) else None) or {}
         # visible_total_count первым: total_elements срезан потолком 1000, и по нему
         # вся продажа (1865) выглядела одной полосой — собиралась бы лишь 1000
         for k in ("visible_total_count", "total_elements", "total", "count"):
             if isinstance(meta.get(k), int):
                 return meta[k]
-        return len(data.get("data") or [])
+        # Ни счётчика, ни списка — ответ не понят. Вернуть 0 нельзя: страницы не запросятся,
+        # обход сочтётся полным, а полоса цен — пустой, и её объявления снимутся через 3 дня
+        # (F-012 Codex 06.11.2026: {"metadata":{}} снял все 19 объявлений малого каталога)
+        if not isinstance(data, dict) or not isinstance(data.get("data"), list):
+            raise ValueError(u"ответ OLX не распознан: нет ни счётчика, ни списка data (цена %s–%s)" % (lo, hi))
+        return len(data["data"])
 
     def _bands(self, fetcher, base: dict, offer_type: str) -> List[Tuple[Optional[int], Optional[int], int]]:
         """Полосы цены с числом объявлений ≤ потолка offset. Дробит пополам,

@@ -45,6 +45,10 @@ OTODOM_SEARCH = {
 #: и дома в неё не попадут ни одним забытым запросом.
 KINDS = ("sale", "rent", "house_sale", "house_rent")
 HOUSE_OF = {"sale": "house_sale", "rent": "house_rent"}
+#: Тип строк-фантомов Otodom (служебная копия первого объявления страницы, см.
+#: otodom._without_copies, scripts/mark_technical_copies.py). Это не наблюдения о рынке:
+#: всё, что считает по типу сделки, их не видит, строки при этом не удалены.
+TECHNICAL_COPY = "technical_copy"
 
 
 def is_rent(kind: str) -> bool:
