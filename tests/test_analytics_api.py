@@ -647,8 +647,8 @@ def test_admin_restart_refuses_during_run_and_for_viewer(clean_db, monkeypatch):
 
 
 def test_network_failed_run_is_retried_later(clean_db, monkeypatch):
-    """02.11.2026 DNS роутера сбоил: продажа в 11:00 и 17:00 не собралась и ждала
-    следующего окна. Прогон без сети теперь повторяется через 30 мин, до трёх раз;
+    """02.11.2026 продажа в 11:00 и 17:00 упала с WinError 10061 и ждала следующего
+    окна. Прогон без сети теперь повторяется через 30 мин, до трёх раз;
     за домами после такого прогона не идём."""
     from datetime import datetime
     from app import main as M
